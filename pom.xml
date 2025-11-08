@@ -15,7 +15,7 @@
   <developers>
     <developer>
       <name>Hadley So</name>
-      <url>https://github.com/HadleySo</url>
+      <url>https://www.hadleyso.com/</url>
     </developer>
   </developers>
 
@@ -48,9 +48,7 @@
               <version>${lombok.version}</version>
             </path>
           </annotationProcessorPaths>
-
         </configuration>
-
       </plugin>
     </plugins>
   </build>
@@ -96,5 +94,11 @@
       <scope>provided</scope>
     </dependency>
 
+    <!-- Feature -->
+    <dependency>
+      <groupId>com.github.ua-parser</groupId>
+      <artifactId>uap-java</artifactId>
+      <version>1.6.1</version>
+    </dependency>
   </dependencies>
 </project>

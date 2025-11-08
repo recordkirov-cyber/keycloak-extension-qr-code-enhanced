@@ -87,17 +87,16 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         // Build redirect path
         UriBuilder builderPath = Urls.realmBase(session.getContext().getUri().getBaseUri())
             .path(realm.getName())
-            .path(QrAuthenticatorResourceProviderFactory.getStaticId())
-            .path(QrAuthenticatorResourceProvider.class, "approveRemote");
+            .path(QrAuthenticatorResourceProviderFactory.getStaticId());
         UriBuilder builderToken = Urls.realmBase(session.getContext().getUri().getBaseUri())
             .path(realm.getName())
             .path(QrAuthenticatorResourceProviderFactory.getStaticId())
-            .path(QrAuthenticatorResourceProvider.class, "approveRemote")
+            .path(QrAuthenticatorResourceProvider.class, "verify")
             .queryParam("prompt", "login")
             .queryParam(Constants.TOKEN, token);
         
+        String clientRedirects = builderPath.build().toString() + "*";
         String redirectURI = builderToken.build().toString();
-        String clientRedirects = builderPath.build().toString();
 
 
         // Get account client and add redirect path
@@ -125,6 +124,40 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
             .queryParam("response_type", "code");
 
         return Response.seeOther(uriBuilder.build()).build();
+
+    }
+
+    @GET
+    @Path("verify")
+    @Produces(MediaType.TEXT_HTML)
+	public Response verify(@QueryParam(Constants.TOKEN) String token) {   
+        log.info("QrAuthenticatorResourceProvider.verify");
+
+        // Convert to action token
+        QrAuthenticatorActionToken actionToken = convertActionToken(token);
+        
+        // Get UA
+        Map<String, String> ua = actionToken.getUA();
+
+        // Get approve link
+        RealmModel realm = session.realms().getRealm(actionToken.getRealmId());
+        UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
+            .path(realm.getName())
+            .path(QrAuthenticatorResourceProviderFactory.getStaticId())
+            .path(QrAuthenticatorResourceProvider.class, "approveRemote")
+            .queryParam("prompt", "login")
+            .queryParam(Constants.TOKEN, token);
+        String approveURL = builder.build().toString();
+
+
+        // Create form
+        LoginFormsProvider form = session.getProvider(LoginFormsProvider.class);
+        form.setAttribute("approveURL", approveURL);
+        form.setAttribute("ua_os", ua.get("ua_os"));
+        form.setAttribute("ua_device", ua.get("ua_device"));
+        form.setAttribute("ua_agent", ua.get("ua_agent"));
+
+        return form.createForm("qr-login-verify.ftl");
 
     }
 
@@ -173,16 +206,7 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         }
 
         // Convert to action token
-        JWSInput jws;
-        QrAuthenticatorActionToken actionToken;
-        try {
-            jws = new JWSInput(token);
-            actionToken = jws.readJsonContent(QrAuthenticatorActionToken.class);
-        } catch (JWSInputException e) {
-            throw new ErrorPageException(session, 
-                                Response.Status.BAD_REQUEST, 
-                                Messages.EXPIRED_CODE);
-        }
+        QrAuthenticatorActionToken actionToken = convertActionToken(token);
         
         
         // Get remote session info
@@ -236,5 +260,21 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
     @Produces(MediaType.TEXT_HTML)
 	public Response successPage(@QueryParam(Constants.TOKEN) String token) {   
         return session.getProvider(LoginFormsProvider.class).createForm("qr-login-success.ftl");
+    }
+
+    private QrAuthenticatorActionToken convertActionToken(String token) {
+        JWSInput jws;
+        QrAuthenticatorActionToken actionToken;
+        try {
+            jws = new JWSInput(token);
+            actionToken = jws.readJsonContent(QrAuthenticatorActionToken.class);
+        } catch (JWSInputException e) {
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.EXPIRED_CODE);
+        }
+        
+        return actionToken;
+
     }
 }

@@ -19,12 +19,15 @@ import com.hadleyso.keycloak.qrauth.token.QrAuthenticatorActionToken;
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.extern.jbosslog.JBossLog;
+import ua_parser.Parser;
+import ua_parser.Client;
 
 @JBossLog
 public class QrUtils {
     public static final String AUTHENTICATED_USER_ID = "AUTHENTICATED_USER_ID";
     public static final String AUTHENTICATED_LOA = "AUTHENTICATED_LOA";
     public static final String JWT_REQ = "JTW_REQ_TOKEN";
+
 
     public static QrAuthenticatorActionToken createActionToken(
         AuthenticationFlowContext context) {
@@ -34,12 +37,22 @@ public class QrUtils {
             RealmModel realm = authSession.getRealm();
             int expirationTimeInSecs = Time.currentTime() + 300;
 
+            // Get user agent
+            String userAgent = context.getHttpRequest().getHttpHeaders().getHeaderString("User-Agent");
+            Parser uaParser = new Parser();
+            Client uaClient = uaParser.parse(userAgent);
+
+            String ua_os = uaClient.os.family;
+            String ua_device = uaClient.device.family;
+            String ua_agent = uaClient.userAgent.family;
+            
             QrAuthenticatorActionToken token = new QrAuthenticatorActionToken(
                                                     authSession, 
                                                     tabId, 
                                                     realm,
                                                     nonce, 
-                                                    expirationTimeInSecs);
+                                                    expirationTimeInSecs,
+                                                    ua_os, ua_device, ua_agent);
             return token;
     }
 
