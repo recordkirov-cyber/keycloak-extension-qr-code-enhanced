@@ -10,7 +10,6 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.services.Urls;
 import org.keycloak.sessions.AuthenticationSessionModel;
-import org.keycloak.models.ClientModel;
 import org.keycloak.models.Constants;
 
 import com.hadleyso.keycloak.qrauth.resources.QrAuthenticatorResourceProvider;
@@ -32,14 +31,12 @@ public class QrUtils {
             String tabId = authSession.getTabId();
             String nonce = authSession.getClientNote(OIDCLoginProtocol.NONCE_PARAM);
             RealmModel realm = authSession.getRealm();
-            ClientModel client = authSession.getClient();
             int expirationTimeInSecs = Time.currentTime() + 300;
 
             QrAuthenticatorActionToken token = new QrAuthenticatorActionToken(
                                                     authSession, 
                                                     tabId, 
                                                     realm,
-                                                    client,
                                                     nonce, 
                                                     expirationTimeInSecs);
             return token;
