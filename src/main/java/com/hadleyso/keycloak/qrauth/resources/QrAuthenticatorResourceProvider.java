@@ -2,19 +2,26 @@ package com.hadleyso.keycloak.qrauth.resources;
 
 import java.net.URI;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.keycloak.TokenVerifier;
+import org.keycloak.authentication.actiontoken.ActionTokenContext;
+import org.keycloak.jose.jws.JWSInput;
+import org.keycloak.jose.jws.JWSInputException;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.RealmProvider;
 import org.keycloak.models.UserModel;
 import org.keycloak.services.Urls;
-import org.keycloak.services.managers.AuthenticationSessionManager;
+import org.keycloak.services.managers.AppAuthManager;
+import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.resource.RealmResourceProvider;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.AuthenticationSessionProvider;
+import org.keycloak.sessions.RootAuthenticationSessionModel;
 
 import com.hadleyso.keycloak.qrauth.QrUtils;
 import com.hadleyso.keycloak.qrauth.token.QrAuthenticatorActionToken;
@@ -73,13 +80,19 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         RealmModel realm = session.realms().getRealm(tokenVerified.getRealmId());
 
         // Build redirect path
-        UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
-                .path(realm.getName())
-                .path(QrAuthenticatorResourceProviderFactory.getStaticId())
-                .path(QrAuthenticatorResourceProvider.class, "approveRemote")
-                .queryParam(Constants.TOKEN, token);
+        UriBuilder builderPath = Urls.realmBase(session.getContext().getUri().getBaseUri())
+            .path(realm.getName())
+            .path(QrAuthenticatorResourceProviderFactory.getStaticId())
+            .path(QrAuthenticatorResourceProvider.class, "approveRemote");
+        UriBuilder builderToken = Urls.realmBase(session.getContext().getUri().getBaseUri())
+            .path(realm.getName())
+            .path(QrAuthenticatorResourceProviderFactory.getStaticId())
+            .path(QrAuthenticatorResourceProvider.class, "approveRemote")
+            .queryParam("prompt", "login")
+            .queryParam(Constants.TOKEN, token);
         
-        String redirectURI = builder.build(realm.getName()).toString();
+        String redirectURI = builderToken.build().toString();
+        String clientRedirects = builderPath.build().toString();
 
 
         // Get account client and add redirect path
@@ -89,8 +102,8 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         }
 
         Set<String> uris = new HashSet<>(accountClient.getRedirectUris());
-        if (!uris.contains(redirectURI)) {
-            uris.add(redirectURI);
+        if (!uris.contains(clientRedirects)) {
+            uris.add(clientRedirects);
             accountClient.setRedirectUris(uris);
         }
 
@@ -113,7 +126,8 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
     @Path("approve")
     @Produces(MediaType.TEXT_HTML)
 	public Response approveRemote(@QueryParam(Constants.TOKEN) String token) {   
-        
+        log.info("QrAuthenticatorResourceProvider.approveRemote");
+
         // Verify token
         QrAuthenticatorActionToken tokenVerified = null;
         try {
@@ -133,35 +147,49 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
                         .entity("Invalid token").build();
         }
 
-        // Get user
-        UserModel user = session.getContext().getAuthenticationSession() != null
-                ? session.getContext().getAuthenticationSession().getAuthenticatedUser()
-                : null;
+        // Get user            
+        RealmModel realm = session.getContext().getRealm();
+        AppAuthManager authManager = new AppAuthManager();
+        AuthenticationManager.AuthResult auth = authManager.authenticateIdentityCookie(session, realm);
+        UserModel user = auth.getUser();
 
-            
         // Verify user valid
         String userId = null;
         if (user != null) {
             userId = user.getId();
         } else {
-            return null; 
+            return Response.status(Response.Status.BAD_REQUEST)
+                        .entity("Invalid user session").build();
         }
 
+        // Convert to action token
+        JWSInput jws;
+        QrAuthenticatorActionToken actionToken;
+        try {
+            jws = new JWSInput(token);
+            actionToken = jws.readJsonContent(QrAuthenticatorActionToken.class);
+        } catch (JWSInputException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Invalid token").build();
+        }
+        
+        
         // Get remote session info
-        String sid = tokenVerified.getSessionId();
-        String tid = tokenVerified.getTabId();
+        String sid = actionToken.getSessionId();
+        String tid = actionToken.getTabId();
+        String rid = actionToken.getRealmId();
+
+        RealmModel remoteRealm = session.realms().getRealm(rid);
+
+        AuthenticationSessionProvider provider = session.authenticationSessions();
+        RootAuthenticationSessionModel rootAuthSession = provider.getRootAuthenticationSession(remoteRealm, sid);
 
         // Set remote session to valid
-        RealmModel realm = session.realms().getRealm(tokenVerified.getRealmId());
-        AuthenticationSessionProvider provider = session.authenticationSessions();
-        var rootAuthSession = provider.getRootAuthenticationSession(realm, sid);
-
-        ClientModel remoteClient = session.clients().getClientByClientId(realm, tokenVerified.getClientId());
-
         if (rootAuthSession != null) {
             // Then get the tab-specific authentication session
-            AuthenticationSessionModel authSession = rootAuthSession.getAuthenticationSession(remoteClient, tid);
-
+            Map<String, AuthenticationSessionModel> allSessions = rootAuthSession.getAuthenticationSessions();
+            AuthenticationSessionModel authSession = allSessions.get(tid);
+            
             if (authSession != null) {
                 authSession.setAuthNote(QrUtils.AUTHENTICATED_USER_ID, userId);
             } else {

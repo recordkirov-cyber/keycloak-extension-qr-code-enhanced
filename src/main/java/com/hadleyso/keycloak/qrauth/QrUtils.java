@@ -63,6 +63,7 @@ public class QrUtils {
                 .path(realmName)
                 .path(QrAuthenticatorResourceProviderFactory.getStaticId())
                 .path(QrAuthenticatorResourceProvider.class, "loginWithQrCode")
-                .queryParam(Constants.TOKEN, tokenString);
+                .queryParam(Constants.TOKEN, tokenString)
+                .queryParam("prompt", "login");
     }
 }

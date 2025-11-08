@@ -5,6 +5,7 @@ import org.keycloak.authentication.Authenticator;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
+import org.keycloak.sessions.AuthenticationSessionModel;
 
 import com.hadleyso.keycloak.qrauth.token.QrAuthenticatorActionToken;
 
@@ -19,16 +20,44 @@ public class QrAuthenticator implements Authenticator {
 
     @Override
     public void action(AuthenticationFlowContext context) {
-        // TODO Auto-generated method stub
-        log.debug("QrAuthenticator.action");
-
-        throw new UnsupportedOperationException("Unimplemented method 'action'");
+        log.info("QrAuthenticator.action");
+        return;
     }
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
-        // TODO Auto-generated method stub
-        log.debug("QrAuthenticator.authenticate");
+        log.info("QrAuthenticator.authenticate");
+
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        KeycloakSession session = context.getSession();
+        RealmModel realm = context.getRealm();
+
+        UserModel user = null;
+
+        log.info("QrAuthenticator.action 1");
+        if (authSession != null) {
+            log.info("QrAuthenticator.action 2");
+            // Retrieve the note by key
+            String authOkUserId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
+            log.info("QrAuthenticator.action 3");
+            if (authOkUserId != null) {
+                log.info("QrAuthenticator.action 4");
+                user = session.users().getUserById(realm, authOkUserId);
+            } 
+        } 
+        log.info("QrAuthenticator.action 5");
+        if (user != null) {
+            log.info("QrAuthenticator.action 6");
+            // Attach the user to the flow
+            context.setUser(user);
+
+            // Mark the flow as successful
+            context.success();
+            return;
+        }
+
+
+        // NOT LOGGED IN
 
         // Create token and convert to link
         QrAuthenticatorActionToken token = QrUtils.createActionToken(context);
