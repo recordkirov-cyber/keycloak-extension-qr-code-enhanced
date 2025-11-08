@@ -34,24 +34,18 @@ public class QrAuthenticator implements Authenticator {
 
         UserModel user = null;
 
-        log.info("QrAuthenticator.action 1");
         if (authSession != null) {
-            log.info("QrAuthenticator.action 2");
             // Retrieve the note by key
             String authOkUserId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
-            log.info("QrAuthenticator.action 3");
+
             if (authOkUserId != null) {
                 log.info("QrAuthenticator.action 4");
                 user = session.users().getUserById(realm, authOkUserId);
             } 
         } 
-        log.info("QrAuthenticator.action 5");
         if (user != null) {
-            log.info("QrAuthenticator.action 6");
             // Attach the user to the flow
             context.setUser(user);
-
-            // Mark the flow as successful
             context.success();
             return;
         }
@@ -71,7 +65,7 @@ public class QrAuthenticator implements Authenticator {
             context.form()
                 .setAttribute("QRauthExecId", execId)
                 .setAttribute("QRauthToken", link)
-                .createForm("login-qr-code.ftl")
+                .createForm("qr-login-scan.ftl")
         );
     }
 

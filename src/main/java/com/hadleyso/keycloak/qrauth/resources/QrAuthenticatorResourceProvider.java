@@ -1,23 +1,23 @@
 package com.hadleyso.keycloak.qrauth.resources;
 
-import java.net.URI;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
 import org.keycloak.TokenVerifier;
-import org.keycloak.authentication.actiontoken.ActionTokenContext;
+import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.jose.jws.JWSInput;
 import org.keycloak.jose.jws.JWSInputException;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
-import org.keycloak.models.RealmProvider;
 import org.keycloak.models.UserModel;
+import org.keycloak.services.ErrorPageException;
 import org.keycloak.services.Urls;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
+import org.keycloak.services.messages.Messages;
 import org.keycloak.services.resource.RealmResourceProvider;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.AuthenticationSessionProvider;
@@ -66,13 +66,15 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
                     .getToken();
 
         } catch (Exception e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Invalid token: " + e.getMessage()).build();
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.INVALID_REQUEST);
         } 
         
         if (tokenVerified == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Invalid token").build();
+                throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.EXPIRED_CODE);
         }
 
 
@@ -98,7 +100,9 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         // Get account client and add redirect path
         ClientModel accountClient = session.clients().getClientByClientId(realm, "account");
         if (accountClient == null) {
-            throw new IllegalStateException("Account client not found in realm " + realm.getName());
+            throw new ErrorPageException(session, 
+                Response.Status.BAD_REQUEST, 
+                Messages.INTERNAL_SERVER_ERROR);
         }
 
         Set<String> uris = new HashSet<>(accountClient.getRedirectUris());
@@ -138,13 +142,15 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
                     .getToken();
 
         } catch (Exception e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Invalid token: " + e.getMessage()).build();
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.INVALID_REQUEST);
         } 
         
         if (tokenVerified == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Invalid token").build();
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.EXPIRED_CODE);
         }
 
         // Get user            
@@ -158,8 +164,9 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         if (user != null) {
             userId = user.getId();
         } else {
-            return Response.status(Response.Status.BAD_REQUEST)
-                        .entity("Invalid user session").build();
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.INTERNAL_SERVER_ERROR);
         }
 
         // Convert to action token
@@ -169,8 +176,9 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
             jws = new JWSInput(token);
             actionToken = jws.readJsonContent(QrAuthenticatorActionToken.class);
         } catch (JWSInputException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Invalid token").build();
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.EXPIRED_CODE);
         }
         
         
@@ -193,14 +201,29 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
             if (authSession != null) {
                 authSession.setAuthNote(QrUtils.AUTHENTICATED_USER_ID, userId);
             } else {
-                throw new IllegalStateException("No tab found for that session");
+                throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.ALREADY_LOGGED_IN);
             }
         } else {
-            throw new IllegalStateException("No root authentication session found for id=" + sid);
+            throw new ErrorPageException(session, 
+                                Response.Status.BAD_REQUEST, 
+                                Messages.EXPIRED_ACTION);
         }
 
-        return Response.seeOther(URI.create("http://localhost:8080/realms/master/account")).build();
+        // Build redirect path to success page
+        UriBuilder builder = Urls.realmBase(session.getContext().getUri().getBaseUri())
+            .path(realm.getName())
+            .path(QrAuthenticatorResourceProviderFactory.getStaticId())
+            .path(QrAuthenticatorResourceProvider.class, "successPage");
+        return Response.seeOther(builder.build()).build();
     }
 
 
+    @GET
+    @Path("success")
+    @Produces(MediaType.TEXT_HTML)
+	public Response successPage(@QueryParam(Constants.TOKEN) String token) {   
+        return session.getProvider(LoginFormsProvider.class).createForm("qr-login-success.ftl");
+    }
 }
