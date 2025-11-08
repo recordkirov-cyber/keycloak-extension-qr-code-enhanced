@@ -6,7 +6,7 @@
         ${msg("successQrCodeLoginTitle")}
     <#elseif section = "form">
 
-        <p>${msg('successQrCodeLoginMessage)}<p>
+        <p>${msg("successQrCodeLoginMessage")}<p>
         
     </#if>
 </@layout.registrationLayout>
