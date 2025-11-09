@@ -15,12 +15,14 @@
             <input type="submit" value="${msg("doLogIn")}" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonLargeClass!}"/>
         </form>
 
-        <script>
-            // Wait 15 seconds 
-            setTimeout(function() {
-                document.getElementById("com-hadleyso-qrcode-${QRauthExecId}").submit();
-            }, 15000);
-        </script>
+        <#if refreshRate != 0>
+            <script>
+                // Wait 15 seconds 
+                setTimeout(function() {
+                    document.getElementById("com-hadleyso-qrcode-${QRauthExecId}").submit();
+                }, ${refreshRate}000);
+            </script>
+        </#if>
 
         <script src="${url.resourcesPath}/js/jquery.min.js"></script>
         <script src="${url.resourcesPath}/js/qrcode.min.js"></script>

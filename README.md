@@ -30,6 +30,11 @@ Compatible with **Keycloak 26.4.2**. Should be compatible with 26.3.0 but has no
 
 **No configuration** needed, just add it to your browser flow. 
 
+Optional configuration is available for **Refresh Rate** and **Login Timeout**:  
+- Refresh rate sets how often the login page reloads and checks if the user has authenticated  
+- Login timeout sets how long the user has before the flow is invalidated  
+- **Note**: If the Refresh Rate is zero or less than Login Timeout, the QR code will display even when the flow has expired/invalidated.
+
 The [ftl templates](src/main/resources/theme-resources/templates) can be overridden:
 - `qr-login-scan.ftl` requires `${url.resourcesPath}/js/qrcode.min.js` and `${url.resourcesPath}/js/jquery.min.js` for javascript, and `QRauthToken` to provide the QR Code URL
 - `qr-login-verify.ftl` requires `approveURL` to approve the sign in and `rejectURL` to reject.

@@ -25,8 +25,10 @@ import ua_parser.Client;
 @JBossLog
 public class QrUtils {
     public static final String AUTHENTICATED_USER_ID = "AUTHENTICATED_USER_ID";
+    public static final String BRUTE_FORCE_USER_ID = "BRUTE_FORCE_USER_ID";
     public static final String JWT_REQ = "JTW_REQ_TOKEN";
     public static final String REJECT = "REJECT";
+    public static final String TIMEOUT = "TIMEOUT";
 
 
     public static QrAuthenticatorActionToken createActionToken(

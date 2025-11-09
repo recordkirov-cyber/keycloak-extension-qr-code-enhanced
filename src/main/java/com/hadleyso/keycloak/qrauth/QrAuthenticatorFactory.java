@@ -1,5 +1,6 @@
 package com.hadleyso.keycloak.qrauth;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.keycloak.Config.Scope;
@@ -20,6 +21,28 @@ public class QrAuthenticatorFactory implements AuthenticatorFactory {
         AuthenticationExecutionModel.Requirement.ALTERNATIVE,
         AuthenticationExecutionModel.Requirement.DISABLED
     };
+
+    private static final List<ProviderConfigProperty> configProperties = new ArrayList<ProviderConfigProperty>();
+
+    static {
+        ProviderConfigProperty refreshProperty = new ProviderConfigProperty();
+        refreshProperty.setName("refresh.rate");
+        refreshProperty.setLabel("Check Refresh Rate");
+        refreshProperty.setType(ProviderConfigProperty.INTEGER_TYPE);
+        refreshProperty.setHelpText("How often in seconds to reload the page to check if the authentication is approved. Zero disables refresh.");
+        refreshProperty.setDefaultValue(15);
+        refreshProperty.setRequired(true);
+        configProperties.add(refreshProperty);
+
+        ProviderConfigProperty timeoutProperty = new ProviderConfigProperty();
+        timeoutProperty.setName("timeout.rate");
+        timeoutProperty.setLabel("Login Timeout");
+        timeoutProperty.setType(ProviderConfigProperty.INTEGER_TYPE);
+        timeoutProperty.setHelpText("How long in seconds a QR code can be displayed before timeout. Zero disables timeout.");
+        timeoutProperty.setDefaultValue(300);
+        timeoutProperty.setRequired(true);
+        configProperties.add(timeoutProperty);
+    }
 
     @Override
     public void close() {
@@ -55,7 +78,7 @@ public class QrAuthenticatorFactory implements AuthenticatorFactory {
 
     @Override
     public boolean isConfigurable() {
-        return false;
+        return true;
     }
 
     @Override
@@ -70,8 +93,7 @@ public class QrAuthenticatorFactory implements AuthenticatorFactory {
 
     @Override
     public List<ProviderConfigProperty> getConfigProperties() {
-        ProviderConfigProperty empty = new ProviderConfigProperty();
-        return List.of(empty);
+        return configProperties;
     }
 
     @Override
