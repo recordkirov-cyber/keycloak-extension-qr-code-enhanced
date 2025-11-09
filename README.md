@@ -2,6 +2,8 @@
 
  [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
+Sign in to Keycloak with QR Codes.
+
 This authentication extension for [Keycloak](https://www.keycloak.org/) provides an authentication execution that allows users to authenticate with another device.
 
 With QR code authentication, users can quickly and securely authenticate without typing passwords or sharing password on untrusted devices. It also enables easier usage of Passkeys on devices without Bluetooth.
