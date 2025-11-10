@@ -1,22 +1,17 @@
-package com.hadleyso.keycloak.qrauth;
-
-import java.time.ZonedDateTime;
+package com.hadleyso.keycloak.qrauth.auth;
 
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
-import org.keycloak.common.ClientConnection;
 import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
-import org.keycloak.services.managers.BruteForceProtector;
 import org.keycloak.sessions.AuthenticationSessionModel;
-import org.keycloak.utils.StringUtil;
 
+import com.hadleyso.keycloak.qrauth.QrUtils;
 import com.hadleyso.keycloak.qrauth.token.QrAuthenticatorActionToken;
 
-import jakarta.ws.rs.core.UriInfo;
 import lombok.extern.jbosslog.JBossLog;
 
 @JBossLog
@@ -46,7 +41,7 @@ public class QrAuthenticator implements Authenticator {
         // Rejected then cancel
         String reject = authSession.getAuthNote(QrUtils.REJECT);
         if (reject == QrUtils.REJECT) {
-            rejectedBruteForce(context);
+            QrUtils.rejectedBruteForce(context);
             context.cancelLogin();
             context.clearUser();
             context.failure(AuthenticationFlowError.ACCESS_DENIED);
@@ -54,7 +49,7 @@ public class QrAuthenticator implements Authenticator {
         }
 
         // Timeout
-        if (timeoutPassed(context)) {
+        if (QrUtils.timeoutPassed(context)) {
             context.failure(AuthenticationFlowError.EXPIRED_CODE);
             return;
         }
@@ -81,7 +76,7 @@ public class QrAuthenticator implements Authenticator {
         if (link == null) {
             // Create token and convert to link
             QrAuthenticatorActionToken token = QrUtils.createActionToken(context);
-            link = QrUtils.linkFromActionToken(context.getSession(), context.getRealm(), token);
+            link = QrUtils.linkFromActionToken(context.getSession(), context.getRealm(), token, false);
             authSession.setAuthNote(QrUtils.JWT_REQ, link);
         }
 
@@ -99,6 +94,14 @@ public class QrAuthenticator implements Authenticator {
             }
         }
 
+        // Get alignment
+        String alignment = "Center";
+        if (config != null) {
+            alignment = config.getConfig().get("display.alignment");
+            if (alignment == null) alignment = "Center";
+        }
+
+
         // Show ftl template page with QR code
         context.challenge(
             context.form()
@@ -106,6 +109,7 @@ public class QrAuthenticator implements Authenticator {
                 .setAttribute("QRauthToken", link)
                 .setAttribute("tabId", tabId)
                 .setAttribute("refreshRate", refreshRate)
+                .setAttribute("alignment", alignment)
                 .createForm("qr-login-scan.ftl")
         );
     }
@@ -124,47 +128,5 @@ public class QrAuthenticator implements Authenticator {
     public void setRequiredActions(KeycloakSession arg0, RealmModel arg1, UserModel arg2) {
     }
 
-    private boolean timeoutPassed(AuthenticationFlowContext context) {
-        AuthenticationSessionModel authSession = context.getAuthenticationSession();
-        String timeout = authSession.getAuthNote(QrUtils.TIMEOUT);
-
-        if (StringUtil.isNotBlank(timeout)) {
-            ZonedDateTime maxTimestamp = ZonedDateTime.parse(timeout);
-            return maxTimestamp.isBefore(ZonedDateTime.now());
-
-        } 
-
-        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
-        int timeoutRate = 300;
-        if (config != null) {
-            timeoutRate = Integer.valueOf(config.getConfig().get("timeout.rate"));
-
-            if (timeoutRate > 0) {
-                ZonedDateTime maxTimestamp = ZonedDateTime.now().plusSeconds(timeoutRate);
-                authSession.setAuthNote(QrUtils.TIMEOUT, maxTimestamp.toString());
-            }
-        }
-        
-        return false;
-    }
-
-    private void rejectedBruteForce(AuthenticationFlowContext context) {
-        AuthenticationSessionModel authSession = context.getAuthenticationSession();
-        KeycloakSession session = context.getSession();
-
-        RealmModel realm = context.getRealm();
-        String bruteUserId = authSession.getAuthNote(QrUtils.BRUTE_FORCE_USER_ID);
-
-        ClientConnection clientConnection = session.getContext().getConnection();
-        UriInfo uriInfo = session.getContext().getUri();
-
-        if (StringUtil.isNotBlank(bruteUserId)) {
-            UserModel user = session.users().getUserById(realm, bruteUserId);
-
-            BruteForceProtector protector = session.getProvider(BruteForceProtector.class);
-            protector.failedLogin(realm, user, clientConnection, uriInfo);
-        }
-        
-    }
     
 }

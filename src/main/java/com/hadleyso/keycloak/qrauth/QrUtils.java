@@ -1,15 +1,26 @@
 package com.hadleyso.keycloak.qrauth;
 
 import java.net.URI;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 
 import org.keycloak.Config;
 import org.keycloak.authentication.AuthenticationFlowContext;
+import org.keycloak.common.ClientConnection;
 import org.keycloak.common.util.Time;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
+import org.keycloak.models.UserModel;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
+import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.services.Urls;
+import org.keycloak.services.managers.BruteForceProtector;
 import org.keycloak.sessions.AuthenticationSessionModel;
+import org.keycloak.utils.StringUtil;
+import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.Constants;
 
 import com.hadleyso.keycloak.qrauth.resources.QrAuthenticatorResourceProvider;
@@ -30,6 +41,40 @@ public class QrUtils {
     public static final String REJECT = "REJECT";
     public static final String TIMEOUT = "TIMEOUT";
 
+    public static final String REQUEST_SOURCE = "REQUEST_SOURCE";
+    public static final String REQUEST_SOURCE_QUERY = "qr_code_originated";
+
+
+    public static final List<ProviderConfigProperty> configProperties = new ArrayList<ProviderConfigProperty>();
+
+    static {
+        ProviderConfigProperty refreshProperty = new ProviderConfigProperty();
+        refreshProperty.setName("refresh.rate");
+        refreshProperty.setLabel("Check Refresh Rate");
+        refreshProperty.setType(ProviderConfigProperty.INTEGER_TYPE);
+        refreshProperty.setHelpText("How often in seconds to reload the page to check if the authentication is approved. Zero disables refresh.");
+        refreshProperty.setDefaultValue(15);
+        refreshProperty.setRequired(true);
+        configProperties.add(refreshProperty);
+
+        ProviderConfigProperty timeoutProperty = new ProviderConfigProperty();
+        timeoutProperty.setName("timeout.rate");
+        timeoutProperty.setLabel("Login Timeout");
+        timeoutProperty.setType(ProviderConfigProperty.INTEGER_TYPE);
+        timeoutProperty.setHelpText("How long in seconds a QR code can be displayed before timeout. Zero disables timeout.");
+        timeoutProperty.setDefaultValue(300);
+        timeoutProperty.setRequired(true);
+        configProperties.add(timeoutProperty);
+
+        ProviderConfigProperty alignmentProperty = new ProviderConfigProperty();
+        alignmentProperty.setName("display.alignment");
+        alignmentProperty.setLabel("QR Code Alignment");
+        alignmentProperty.setType(ProviderConfigProperty.LIST_TYPE);
+        alignmentProperty.setHelpText("How to align the QR code.");
+        alignmentProperty.setOptions(Arrays.asList("Left", "Center", "Right"));
+        alignmentProperty.setRequired(true);
+        configProperties.add(alignmentProperty);
+    }
 
     public static QrAuthenticatorActionToken createActionToken(
         AuthenticationFlowContext context) {
@@ -47,6 +92,9 @@ public class QrUtils {
             String ua_os = uaClient.os.family;
             String ua_device = uaClient.device.family;
             String ua_agent = uaClient.userAgent.family;
+
+            Locale resolvedLocale = context.getSession().getContext().resolveLocale(context.getUser());
+            String local_localized = resolvedLocale.getDisplayName();
             
             QrAuthenticatorActionToken token = new QrAuthenticatorActionToken(
                                                     authSession, 
@@ -54,11 +102,12 @@ public class QrUtils {
                                                     realm,
                                                     nonce, 
                                                     expirationTimeInSecs,
-                                                    ua_os, ua_device, ua_agent);
+                                                    ua_os, ua_device, ua_agent,
+                                                    local_localized);
             return token;
     }
 
-    public static String linkFromActionToken(KeycloakSession session, RealmModel realm, QrAuthenticatorActionToken token) {
+    public static String linkFromActionToken(KeycloakSession session, RealmModel realm, QrAuthenticatorActionToken token, Boolean usernamePasswordPage) {
         UriInfo uriInfo = session.getContext().getUri();
         String realmName = realm.getName();
         
@@ -69,6 +118,10 @@ public class QrUtils {
 
         UriBuilder builder = actionTokenBuilder(uriInfo.getBaseUri(), token.serialize(session, realm, uriInfo), realmName);
 
+        if (usernamePasswordPage == true) {
+            builder.queryParam(QrUtils.REQUEST_SOURCE_QUERY, true);
+        }
+        
         return builder.build(realm.getName()).toString();
     }
 
@@ -79,5 +132,48 @@ public class QrUtils {
                 .path(QrAuthenticatorResourceProvider.class, "loginWithQrCode")
                 .queryParam(Constants.TOKEN, tokenString)
                 .queryParam("prompt", "login");
+    }
+
+    public static void rejectedBruteForce(AuthenticationFlowContext context) {
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        KeycloakSession session = context.getSession();
+
+        RealmModel realm = context.getRealm();
+        String bruteUserId = authSession.getAuthNote(QrUtils.BRUTE_FORCE_USER_ID);
+
+        ClientConnection clientConnection = session.getContext().getConnection();
+        UriInfo uriInfo = session.getContext().getUri();
+
+        if (StringUtil.isNotBlank(bruteUserId)) {
+            UserModel user = session.users().getUserById(realm, bruteUserId);
+
+            BruteForceProtector protector = session.getProvider(BruteForceProtector.class);
+            protector.failedLogin(realm, user, clientConnection, uriInfo);
+        }
+        
+    }
+
+    public static boolean timeoutPassed(AuthenticationFlowContext context) {
+        AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        String timeout = authSession.getAuthNote(QrUtils.TIMEOUT);
+
+        if (StringUtil.isNotBlank(timeout)) {
+            ZonedDateTime maxTimestamp = ZonedDateTime.parse(timeout);
+            return maxTimestamp.isBefore(ZonedDateTime.now());
+
+        } 
+
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        int timeoutRate = 300;
+        if (config != null) {
+            timeoutRate = Integer.valueOf(config.getConfig().get("timeout.rate"));
+
+            if (timeoutRate > 0) {
+                ZonedDateTime maxTimestamp = ZonedDateTime.now().plusSeconds(timeoutRate);
+                authSession.setAuthNote(QrUtils.TIMEOUT, maxTimestamp.toString());
+            }
+        }
+        
+        return false;
     }
 }
