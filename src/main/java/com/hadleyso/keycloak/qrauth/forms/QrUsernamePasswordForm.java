@@ -19,21 +19,28 @@ import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.jbosslog.JBossLog;
+import org.jboss.logging.Logger;
 
 @JBossLog
 public class QrUsernamePasswordForm extends UsernamePasswordForm {
+    private static final Logger logger = Logger.getLogger(QrUsernamePasswordForm.class);
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
         log.info("QrUsernamePasswordForm.authenticate");
+
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+
         final AuthenticationSessionModel authSession = context.getAuthenticationSession();
         final KeycloakSession session = context.getSession();
         RealmModel realm = context.getRealm();
 
-
         // Rejected then cancel
         String reject = authSession.getAuthNote(QrUtils.REJECT);
         if (reject == QrUtils.REJECT) {
+            if (logger.isTraceEnabled()) {
+                logger.tracef("Flow '%s' was rejected by remote by user", context.toString());
+            }
             QrUtils.rejectedBruteForce(context);
             context.cancelLogin();
             context.clearUser();
@@ -43,40 +50,47 @@ public class QrUsernamePasswordForm extends UsernamePasswordForm {
 
         // Timeout
         if (QrUtils.timeoutPassed(context)) {
+            if (logger.isTraceEnabled()) {
+                logger.tracef("Flow '%s' has expired", context.toString());
+            }
             context.failure(AuthenticationFlowError.EXPIRED_CODE);
             return;
         }
 
-        // Check if authenticated 
+        // Check if authenticated
         UserModel user = null;
         String authOkUserId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
         if (authOkUserId != null) {
             user = session.users().getUserById(realm, authOkUserId);
-        } 
+        }
         if (user != null) {
             // Attach the user to the flow
+            if (logger.isTraceEnabled()) {
+                logger.tracef("Attaching user '%s' '%s' to flow '%s'", user.getId(), user.getUsername(), context.toString());
+            }
             context.setUser(user);
+            QrUtils.handleACR(config, context, authSession);
             context.success();
             return;
         }
 
         // NOT LOGGED IN BY QR
 
-
-        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
-
         // Check if already made
         String link = authSession.getAuthNote(QrUtils.NOTE_QR_LINK);
 
         if (link == null) {
             // Create token and convert to link
-            String token = QrUtils.createPublicToken(context);
+            String token = QrUtils.createPublicToken(context, QrUtils.transferAcrEnabled(config));
             if (token == null) {
                 context.failure(AuthenticationFlowError.INTERNAL_ERROR);
                 return;
             }
             link = QrUtils.linkFromActionToken(context.getSession(), context.getRealm(), token, true);
             authSession.setAuthNote(QrUtils.NOTE_QR_LINK, link);
+            if (logger.isTraceEnabled()) {
+                logger.tracef("Created new token with link - token: '%s;", token);
+            }
         }
 
         // Get execution ID for auto-refresh form
@@ -88,10 +102,9 @@ public class QrUsernamePasswordForm extends UsernamePasswordForm {
         String alignment = "Center";
         if (config != null) {
             alignment = config.getConfig().get("display.alignment");
-            if (alignment == null) alignment = "Center";
+            if (alignment == null)
+                alignment = "Center";
         }
-
-
 
         // https://github.com/keycloak/keycloak/blob/39c4c1ed942a4bdcc0a3c4d68a9b853a082ea9a2/services/src/main/java/org/keycloak/authentication/authenticators/browser/UsernamePasswordForm.java#L127-L133
 
@@ -133,6 +146,10 @@ public class QrUsernamePasswordForm extends UsernamePasswordForm {
             webauthnAuth.fillContextForm(context);
         }
 
+   
+        if (logger.isTraceEnabled()) {
+            logger.tracef("Serving session '%s' with tabId '%s' with token in link: '%s;", execId, tabId, link);
+        }
         // Response challengeResponse = challenge(context, formData);
         Response challengeResponse = setFormData(context, formData);
         context.challenge(challengeResponse);
@@ -153,7 +170,7 @@ public class QrUsernamePasswordForm extends UsernamePasswordForm {
             forms.setAttribute("login", new LoginBean(formData));
             for (String key : formData.keySet()) {
                 forms.setAttribute(key, formData.getFirst(key));
-            } 
+            }
             forms.setFormData(formData);
 
         } else {
