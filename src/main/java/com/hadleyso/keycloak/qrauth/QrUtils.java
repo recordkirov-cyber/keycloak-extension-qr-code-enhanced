@@ -5,19 +5,25 @@ import java.net.URI;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.keycloak.Config;
 import org.keycloak.authentication.AuthenticationFlowContext;
+import org.keycloak.authentication.AuthenticatorUtil;
 import org.keycloak.authentication.authenticators.util.AcrStore;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.common.util.Base64Url;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
+import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.UserSessionProvider;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.services.Urls;
@@ -34,6 +40,7 @@ import com.hadleyso.keycloak.qrauth.resources.QrAuthenticatorResourceProviderFac
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import lombok.extern.jbosslog.JBossLog;
+import org.jboss.logging.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -48,6 +55,7 @@ public class QrUtils {
 
     public static final String AUTHENTICATED_USER_ID = "AUTHENTICATED_USER_ID";
     public static final String AUTHENTICATED_ACR = "AUTHENTICATED_ACR";
+    public static final String AUTHENTICATED_CREDENTIALS = "AUTHENTICATED_CREDENTIALS";
     public static final String BRUTE_FORCE_USER_ID = "BRUTE_FORCE_USER_ID";
     public static final String NOTE_QR_LINK = "QR-LINK-PUBLIC";
     public static final String REJECT = "REJECT";
@@ -67,6 +75,8 @@ public class QrUtils {
 
     public static final List<ProviderConfigProperty> configProperties = new ArrayList<ProviderConfigProperty>();
 
+    private static final Logger logger = Logger.getLogger(QrUtils.class);
+    
     static {
         ProviderConfigProperty refreshProperty = new ProviderConfigProperty();
         refreshProperty.setName("refresh.rate");
@@ -106,6 +116,28 @@ public class QrUtils {
         acrProperty.setRequired(true);
         acrProperty.setDefaultValue(false);
         configProperties.add(acrProperty);
+
+        ProviderConfigProperty credentialProperty = new ProviderConfigProperty();
+        credentialProperty.setName("credential.allow.transfer");
+        credentialProperty.setLabel("Allow Credential Type Transfer");
+        credentialProperty.setType(ProviderConfigProperty.BOOLEAN_TYPE);
+        credentialProperty.setHelpText(
+                "Should Credential Types used on the alternate device apply to the originating authentication. Set to true to enable credential types to transfer. Requires Remember Credential Type execution.");
+        credentialProperty.setRequired(true);
+        credentialProperty.setDefaultValue(false);
+        configProperties.add(credentialProperty);
+    }
+
+    public static String serializeList(List<String> values) {
+        String serialized = values.stream().collect(Collectors.joining(","));
+        return serialized;
+    }
+
+    public static List<String> deserializeList(String serialized) {
+        if (serialized == null) {
+            return List.of();
+        }
+        return Arrays.asList(serialized.split(","));
     }
 
     public static String createPublicToken(AuthenticationFlowContext context, Boolean setACR) {
@@ -277,12 +309,12 @@ public class QrUtils {
         return false;
     }
 
-    public static void handleACR(AuthenticatorConfigModel config, AuthenticationFlowContext context,
-            AuthenticationSessionModel authSession) {
+    public static void handleACR(AuthenticatorConfigModel config, AuthenticationFlowContext context) {
 
         if (config == null)
             return;
 
+        final AuthenticationSessionModel authSession = context.getAuthenticationSession();
         final AcrStore acrStore = new AcrStore(context.getSession(), authSession);
 
         if (Boolean.parseBoolean(config.getConfig().get("acr.allow.transfer")) == true) {
@@ -304,5 +336,49 @@ public class QrUtils {
         if (config == null)
             return false;
         return Boolean.parseBoolean(config.getConfig().get("acr.allow.transfer"));
+    }
+
+    /**
+      * Transfers credentials used to an originating session if enabled
+      * @param config Configuration of the current authenticator 
+      * @param context Originating session context
+      * @return description
+    */
+    public static void handleCredTransfer(AuthenticatorConfigModel config, AuthenticationFlowContext context) {
+        if (logger.isTraceEnabled()) {
+            logger.tracef("Handling credential transfer to origin session");
+        }
+
+        if (config == null)
+            return;
+
+        if (Boolean.parseBoolean(config.getConfig().get("credential.allow.transfer")) != true) {
+            return;
+        }
+
+        // Get proper user session
+        final KeycloakSession session = context.getSession();
+        final AuthenticationSessionModel authSession = context.getAuthenticationSession();
+        final RealmModel realm = context.getRealm();
+        final String userId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
+        UserSessionProvider userSessionProvider = session.sessions();
+        Stream<UserSessionModel> userSessions = userSessionProvider.getUserSessionsStream(realm, session.users().getUserById(realm, userId));
+        UserSessionModel mostRecentSession =
+            userSessions.max(Comparator.comparingInt(UserSessionModel::getLastSessionRefresh))
+                        .orElse(null); 
+
+
+        if (mostRecentSession == null) return;
+
+        // Retrieve from user session
+        String authOkCredentialsRaw = mostRecentSession.getNote(QrUtils.AUTHENTICATED_CREDENTIALS);
+
+        // Set on session
+        List<String> authOkCredentials = deserializeList(authOkCredentialsRaw);
+        for (String authOkCredential : authOkCredentials) {
+            AuthenticatorUtil.addAuthCredential(authSession, authOkCredential);
+        }
+
+        
     }
 }
