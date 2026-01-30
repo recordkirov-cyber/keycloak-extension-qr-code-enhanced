@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.forms;
+package com.codgin.keycloak.qrauth.forms;
 
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
@@ -13,7 +13,7 @@ import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.sessions.AuthenticationSessionModel;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;

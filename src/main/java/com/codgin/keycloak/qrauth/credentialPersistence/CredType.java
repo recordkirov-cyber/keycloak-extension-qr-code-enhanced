@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.credentialPersistence;
+package com.codgin.keycloak.qrauth.credentialPersistence;
 
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.Authenticator;
@@ -8,7 +8,7 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 import lombok.extern.jbosslog.JBossLog;
 

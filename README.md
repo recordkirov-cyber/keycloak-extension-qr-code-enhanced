@@ -24,6 +24,7 @@ The **QR Code Sign In** execution:
 
 - Sign in page refreshes automatically to check if another device has completed authentication
 - Does not require new ftl templates when custom themes are used
+- Can send fallback QR Authentication Link to email for improved user exp
 
 <p align="center">
     <img src="docs/img/qr-scan-login.png" width="550">
@@ -43,11 +44,11 @@ The **Username Password Form with Optional QR Code Login** execution:
 
 
 ## Compatibility
-Compatible with **Keycloak 26.4.x**. Should be compatible with 26.3.x but has not been tested.
+Compatible with **Keycloak 26.4+**.
 
 ## Installation
 
-1. Download the latest compatible release from the [releases page](https://github.com/HadleySo/keycloak-extension-qr-code-execution/releases)
+1. Download the latest compatible release from the [releases page](https://github.com/codgin/keycloak-extension-qr-code-execution/releases)
 2. Save the downloaded JAR file into the `providers/` directory inside Keycloak installation folder
 3. Stop the Keycloak server
 4. Rebuild the installation using `kc.sh build` command
@@ -73,7 +74,7 @@ Compatible with **Keycloak 26.4.x**. Should be compatible with 26.3.x but has no
 **Credential Type Transfer**: 
 - When enabled, the credential types used on the device completing authentication will be transferred to the originating session.
 - Useful when the flow has conditions on credential type.
-- Requires the usage of `Remember Credential Type` executor in the flow used by ClientID `com-hadleyso-keycloak-qrauth-rest-client` (typically realm default browser).
+- Requires the usage of `Remember Credential Type` executor in the flow used by ClientID `com-codgin-keycloak-qrauth-rest-client` (typically realm default browser).
 
 
 ## Template Themes
@@ -95,7 +96,7 @@ The [ftl templates](src/main/resources/theme-resources/templates) can be overrid
 
 #### Messages
 
-Only English and German is provided, see [messages_en.properties](src/main/resources/theme-resources/messages/messages_en.properties) and [messages_de.properties](src/main/resources/theme-resources/messages/messages_de.properties).
+English, Russian are provided, see [messages_en.properties](src/main/resources/theme-resources/messages/messages_en.properties), [messages_ru.properties](src/main/resources/theme-resources/messages/messages_ru.properties).
 
 ## QR Code Information
 
@@ -113,7 +114,6 @@ It exposes the following to authenticated users:
 - Originating device user agent agent name
 - Originating device locale (Accept-Language header)
 - Originating device locale language name, country name, and variant, localized
-<!-- - Originating device IANA time zone name (eg Atlantic/Reykjavik) -->
 
 
 ## License  

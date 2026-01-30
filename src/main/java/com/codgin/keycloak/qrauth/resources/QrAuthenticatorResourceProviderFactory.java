@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.resources;
+package com.codgin.keycloak.qrauth.resources;
 
 import org.keycloak.Config.Scope;
 import org.keycloak.models.KeycloakSession;

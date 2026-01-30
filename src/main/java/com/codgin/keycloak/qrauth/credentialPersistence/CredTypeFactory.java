@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.credentialPersistence;
+package com.codgin.keycloak.qrauth.credentialPersistence;
 
 import java.util.Collections;
 import java.util.List;

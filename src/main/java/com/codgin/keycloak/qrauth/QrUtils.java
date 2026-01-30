@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth;
+package com.codgin.keycloak.qrauth;
 
 import java.io.IOException;
 import java.net.URI;
@@ -31,8 +31,8 @@ import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.ClientModel;
 import org.keycloak.models.ClientScopeModel;
 
-import com.hadleyso.keycloak.qrauth.resources.QrAuthenticatorResourceProvider;
-import com.hadleyso.keycloak.qrauth.resources.QrAuthenticatorResourceProviderFactory;
+import com.codgin.keycloak.qrauth.resources.QrAuthenticatorResourceProvider;
+import com.codgin.keycloak.qrauth.resources.QrAuthenticatorResourceProviderFactory;
 
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;

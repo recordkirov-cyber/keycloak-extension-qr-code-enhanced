@@ -1,22 +1,32 @@
-package com.hadleyso.keycloak.qrauth.auth;
+package com.codgin.keycloak.qrauth.auth;
 
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.Authenticator;
+import org.keycloak.email.EmailException;
+import org.keycloak.email.EmailTemplateProvider;
 import org.keycloak.models.AuthenticatorConfigModel;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.sessions.AuthenticationSessionModel;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 import lombok.extern.jbosslog.JBossLog;
 import org.jboss.logging.Logger;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @JBossLog
 public class QrAuthenticator implements Authenticator {
     private static final Logger logger = Logger.getLogger(QrAuthenticator.class);
+    
+    private static final String SEND_EMAIL_FALLBACK_CONFIG = "send.email.fallback";
+    private static final String EMAIL_SUBJECT_CONFIG = "email.subject";
+    private static final String EMAIL_TEMPLATE_CONFIG = "email.template";
+    private static final String LINK_EXPIRATION_MINUTES_CONFIG = "link.expiration.minutes";
 
     @Override
     public void close() {
@@ -121,6 +131,19 @@ public class QrAuthenticator implements Authenticator {
         if (logger.isTraceEnabled()) {
             logger.tracef("Serving session '%s' with tabId '%s' with token in link: '%s;", execId, tabId, link);
         }
+        
+        // Check if email fallback is enabled and user exists
+        boolean sendEmailFallback = false;
+        if (config != null) {
+            sendEmailFallback = Boolean.parseBoolean(config.getConfig().get(SEND_EMAIL_FALLBACK_CONFIG));
+        }
+        
+        // Email fallback only works when authenticator knows the user (after username/password step)
+        if (sendEmailFallback && context.getUser() != null) {
+            // Send email fallback
+            sendEmailFallback(context, link);
+        }
+        
         // Show ftl template page with QR code
         context.challenge(
                 context.form()
@@ -144,6 +167,88 @@ public class QrAuthenticator implements Authenticator {
 
     @Override
     public void setRequiredActions(KeycloakSession arg0, RealmModel arg1, UserModel arg2) {
+    }
+    
+    /**
+     * Send QR code via email as fallback option.
+     * Email fallback only works when authenticator knows the user (after username/password step).
+     * If no user context exists, skip email sending silently.
+     * @param context Authentication flow context
+     * @param qrLink QR code link to include in email
+     */
+    private void sendEmailFallback(AuthenticationFlowContext context, String qrLink) {
+        try {
+            // Get user
+            UserModel user = context.getUser();
+            if (user == null || user.getEmail() == null || user.getEmail().isEmpty()) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("User or user email is null/empty, skipping email fallback");
+                }
+                return;
+            }
+            
+            AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+            
+            // Get configuration values
+            String emailSubject = "Login with QR Code";
+            String emailTemplate = "email-verification-with-code.ftl";
+            int linkExpirationMinutes = 10;
+            
+            if (config != null) {
+                if (config.getConfig().get(EMAIL_SUBJECT_CONFIG) != null) {
+                    emailSubject = config.getConfig().get(EMAIL_SUBJECT_CONFIG);
+                }
+            }
+            
+            // Get metadata from authentication session
+            final AuthenticationSessionModel authSession = context.getAuthenticationSession();
+            String userAgent = authSession.getAuthNote(QrUtils.ORIGIN_UA_AGENT);
+            String os = authSession.getAuthNote(QrUtils.ORIGIN_UA_OS);
+            String device = authSession.getAuthNote(QrUtils.ORIGIN_UA_DEVICE);
+            
+            // Get IP address from connection
+            String ipAddress = null;
+            if (context.getSession().getContext().getConnection() != null) {
+                ipAddress = context.getSession().getContext().getConnection().getRemoteAddr();
+            }
+            
+            // Create metadata string to include in the code attribute
+            StringBuilder metadataBuilder = new StringBuilder();
+            metadataBuilder.append(qrLink);
+            
+            metadataBuilder.append("<br><br> \n\n--- Login Details ---\n <br>");
+            if (ipAddress != null) {
+                metadataBuilder.append("IP Address: ").append(ipAddress).append("<br>");
+            }
+            if (os != null) {
+                metadataBuilder.append("Operating System: ").append(os).append("<br>");
+            }
+            if (device != null) {
+                metadataBuilder.append("Device: ").append(device).append("<br>");
+            }
+            if (userAgent != null) {
+                metadataBuilder.append("Browser: ").append(userAgent).append("<br>");
+            }
+            
+            // Prepare email attributes
+            Map<String, Object> attributes = new HashMap<>();
+            attributes.put("code", metadataBuilder.toString());
+            
+            // Send email using both HTML and text templates
+            EmailTemplateProvider emailProvider = context.getSession().getProvider(EmailTemplateProvider.class);
+            emailProvider.setRealm(context.getRealm());
+            emailProvider.setUser(user);
+            
+            emailProvider.send(emailSubject, emailTemplate, attributes);
+            
+            if (logger.isDebugEnabled()) {
+                logger.debugf("Sent QR code email to user %s", user.getEmail());
+            }
+        } catch (EmailException e) {
+            logger.error("Failed to send QR code email", e);
+        } catch (Exception e) {
+            logger.error("Unexpected error while sending QR code email", e);
+        }
     }
 
 }

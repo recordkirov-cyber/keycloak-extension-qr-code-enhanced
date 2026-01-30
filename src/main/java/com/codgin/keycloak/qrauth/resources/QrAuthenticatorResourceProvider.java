@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.resources;
+package com.codgin.keycloak.qrauth.resources;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -27,7 +27,7 @@ import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.AuthenticationSessionProvider;
 import org.keycloak.sessions.RootAuthenticationSessionModel;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 import lombok.extern.jbosslog.JBossLog;
 

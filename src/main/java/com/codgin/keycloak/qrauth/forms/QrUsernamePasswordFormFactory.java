@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.forms;
+package com.codgin.keycloak.qrauth.forms;
 
 import java.util.List;
 
@@ -9,7 +9,7 @@ import org.keycloak.models.AuthenticationExecutionModel.Requirement;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.provider.ProviderConfigProperty;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 
 public class QrUsernamePasswordFormFactory extends UsernamePasswordFormFactory {

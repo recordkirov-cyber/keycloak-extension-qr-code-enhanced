@@ -1,4 +1,4 @@
-package com.hadleyso.keycloak.qrauth.auth;
+package com.codgin.keycloak.qrauth.auth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,7 +12,7 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.provider.ProviderConfigProperty;
 
-import com.hadleyso.keycloak.qrauth.QrUtils;
+import com.codgin.keycloak.qrauth.QrUtils;
 
 public class QrAuthenticatorFactory implements AuthenticatorFactory {
 
@@ -24,7 +24,26 @@ public class QrAuthenticatorFactory implements AuthenticatorFactory {
         AuthenticationExecutionModel.Requirement.DISABLED
     };
 
-    private static final List<ProviderConfigProperty> properties = new ArrayList<ProviderConfigProperty>(QrUtils.configProperties);        
+    private static final List<ProviderConfigProperty> properties = new ArrayList<ProviderConfigProperty>(QrUtils.configProperties);
+    
+    static {
+        // Add email fallback configuration properties
+        ProviderConfigProperty emailFallbackProperty = new ProviderConfigProperty();
+        emailFallbackProperty.setName("send.email.fallback");
+        emailFallbackProperty.setLabel("Send Email Fallback");
+        emailFallbackProperty.setType(ProviderConfigProperty.BOOLEAN_TYPE);
+        emailFallbackProperty.setHelpText("Enable sending QR code via email as fallback option. Email fallback only works when authenticator knows the user (after username/password step).");
+        emailFallbackProperty.setDefaultValue(false);
+        properties.add(emailFallbackProperty);
+        
+        ProviderConfigProperty emailSubjectProperty = new ProviderConfigProperty();
+        emailSubjectProperty.setName("email.subject");
+        emailSubjectProperty.setLabel("Email Subject");
+        emailSubjectProperty.setType(ProviderConfigProperty.STRING_TYPE);
+        emailSubjectProperty.setHelpText("Subject for the QR code email");
+        emailSubjectProperty.setDefaultValue("Login with QR Code");
+        properties.add(emailSubjectProperty);
+    }
 
 
     @Override
