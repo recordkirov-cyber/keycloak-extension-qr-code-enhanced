@@ -1,25 +1,25 @@
 <#macro qrLogin>
 
-    <div id="com-hadleyso-qr-auth">
+    <div id="com-codgin-qr-auth">
 
         <h3 class="pf-m-l" style="padding-top: 15px">${msg("doQrCodeLogin")}<h3>
 
-        <div id="com-hadleyso-qr-auth-js-target" 
+        <div id="com-codgin-qr-auth-js-target" 
             style='padding-top: 15px; padding-bottom: 15px; width: 45%; <#if alignment == "Center">margin-left: auto; margin-right: auto;<#elseif alignment == "Right">margin-left: auto; </#if>' 
-            onClick="document.forms['com-hadleyso-qrcode-${QRauthExecId}'].submit();">
+            onClick="document.forms['com-codgin-qrcode-${QRauthExecId}'].submit();">
+            <span style="display: none;">${QRauthToken}</span>
+            <img id="com-codgin-qr-auth-qr-code" src="data:image/png;base64,${QRauthImage}" alt="Figure: Barcode">
         </div>
 
         <p style="padding-top: 5px; padding-bottom: 5px; font-size: medium;">Session: ${tabId}</p>
 
-        <form id="com-hadleyso-qrcode-${QRauthExecId}" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
+        <form id="com-codgin-qrcode-${QRauthExecId}" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
             <input type="hidden" name="authenticationExecution" value="${QRauthExecId}">
         </form>
 
     </div>
 
     
-    <script src="${url.resourcesPath}/js/jquery.min.js"></script>
-    <script src="${url.resourcesPath}/js/qrcode.min.js"></script>
     <script type="text/javascript">
         
 
@@ -39,10 +39,8 @@
             return false;
         };
 
-        if (getUrlParameter('qr_code_originated') == false) {
-            new QRCode(document.getElementById("com-hadleyso-qr-auth-js-target"), "${QRauthToken}");
-        } else {
-            document.getElementById("com-hadleyso-qr-auth").style.display = "none";
+        if (getUrlParameter('qr_code_originated') == true) {
+            document.getElementById("com-codgin-qr-auth").style.display = "none";
         }
     </script>
 </#macro>

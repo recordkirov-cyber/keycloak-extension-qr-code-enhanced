@@ -118,7 +118,7 @@ It exposes the following to authenticated users:
 
 ## License  
 
-Keycloak QR Code Authentication (keycloak-extension-qr-code-execution / com.hadleyso.keycloak.qrauth) is distributed under [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.txt). Copyright (c) 2025 Hadley So.
+Keycloak QR Code Authentication (keycloak-extension-qr-code-execution / com.codgin.keycloak.qrauth) is distributed under [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.txt). Copyright (c) 2025 Hadley So.
 
 
 [`qrcode.min.js`](https://github.com/davidshimjs/qrcodejs) is distributed under [MIT License](https://mit-license.org/) Copyright (c) 2012 davidshimjs

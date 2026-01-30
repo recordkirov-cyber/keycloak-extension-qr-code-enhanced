@@ -6,13 +6,16 @@
         ${msg("doQrCodeLogin")}
     <#elseif section = "form">
 
-        <div id="com-hadleyso-qr-auth-js-target" 
+        <div id="com-codgin-qr-auth-js-target" 
         style='padding-top: 15px; padding-bottom: 15px; width: 45%; <#if alignment == "Center">margin-left: auto; margin-right: auto;<#elseif alignment == "Right">margin-left: auto; </#if>' 
-        onClick="document.forms['com-hadleyso-qrcode-${QRauthExecId}'].submit();"></div>
+        onClick="document.forms['com-codgin-qrcode-${QRauthExecId}'].submit();">
+            <span style="display: none;">${QRauthToken}</span>
+            <img id="com-codgin-qr-auth-qr-code" src="data:image/png;base64,${QRauthImage}" alt="Figure: Barcode">
+        </div>
 
         <p style="padding-top: 15px; padding-bottom: 15px;"><b>Session: </b>${tabId}</p>
 
-        <form id="com-hadleyso-qrcode-${QRauthExecId}" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
+        <form id="com-codgin-qrcode-${QRauthExecId}" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
             <input type="hidden" name="authenticationExecution" value="${QRauthExecId}">
             <input type="submit" value="${msg("doLogIn")}" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonLargeClass!}"/>
         </form>
@@ -21,15 +24,30 @@
             <script>
                 // Wait 15 seconds 
                 setTimeout(function() {
-                    document.getElementById("com-hadleyso-qrcode-${QRauthExecId}").submit();
+                    document.getElementById("com-codgin-qrcode-${QRauthExecId}").submit();
                 }, ${refreshRate}000);
             </script>
         </#if>
 
-        <script src="${url.resourcesPath}/js/jquery.min.js"></script>
-        <script src="${url.resourcesPath}/js/qrcode.min.js"></script>
         <script type="text/javascript">
-            new QRCode(document.getElementById("com-hadleyso-qr-auth-js-target"), "${QRauthToken}");
+            var getUrlParameter = function getUrlParameter(sParam) {
+                var sPageURL = window.location.search.substring(1),
+                    sURLVariables = sPageURL.split('&'),
+                    sParameterName,
+                    i;
+                for (i = 0; i < sURLVariables.length; i++) {
+                    sParameterName = sURLVariables[i].split('=');
+                    if (sParameterName[0] === sParam) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if (getUrlParameter('qr_code_originated') == true) {
+                document.getElementById("com-codgin-qr-auth").style.display = "none";
+            }
+        <script type="text/javascript">
+            new QRCode(document.getElementById("com-codgin-qr-auth-js-target"), "${QRauthToken}");
         </script>
     </#if>
 </@layout.registrationLayout>

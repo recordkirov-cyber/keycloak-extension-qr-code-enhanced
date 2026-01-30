@@ -106,6 +106,8 @@ public class QrAuthenticator implements Authenticator {
             }
         }
 
+        String qrImageData = QrUtils.qrCode(link);
+
         // Get execution ID for auto-refresh form
         // and TabID
         String execId = context.getExecution().getId();
@@ -152,6 +154,7 @@ public class QrAuthenticator implements Authenticator {
                         .setAttribute("tabId", tabId)
                         .setAttribute("refreshRate", refreshRate)
                         .setAttribute("alignment", alignment)
+                        .setAttribute("QRauthImage", qrImageData)
                         .createForm("qr-login-scan.ftl"));
     }
 
