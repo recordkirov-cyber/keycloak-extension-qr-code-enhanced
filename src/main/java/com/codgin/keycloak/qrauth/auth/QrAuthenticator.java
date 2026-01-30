@@ -155,6 +155,9 @@ public class QrAuthenticator implements Authenticator {
                         .setAttribute("refreshRate", refreshRate)
                         .setAttribute("alignment", alignment)
                         .setAttribute("QRauthImage", qrImageData)
+                        //.setAttribute("authFormQrCodeInfo", authFormQrCodeInfo)
+                        .setAttribute("sendEmailFallback", sendEmailFallback)
+                        .setAttribute("userEmail", context.getUser() != null ? context.getUser().getEmail() : "")
                         .createForm("qr-login-scan.ftl"));
     }
 
@@ -219,7 +222,7 @@ public class QrAuthenticator implements Authenticator {
             StringBuilder metadataBuilder = new StringBuilder();
             metadataBuilder.append(qrLink);
             
-            metadataBuilder.append("<br><br> \n\n--- Login Details ---\n <br>");
+            metadataBuilder.append("<br><br> --- Login Details --- <br>");
             if (ipAddress != null) {
                 metadataBuilder.append("IP Address: ").append(ipAddress).append("<br>");
             }

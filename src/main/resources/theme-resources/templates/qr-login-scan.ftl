@@ -6,12 +6,22 @@
         ${msg("doQrCodeLogin")}
     <#elseif section = "form">
 
+        <div class="alert alert-info">
+            <span class="kc-feedback-text">${msg("authFormQrCodeInfo")}</span>
+        </div>
+        
         <div id="com-codgin-qr-auth-js-target" 
         style='padding-top: 15px; padding-bottom: 15px; width: 45%; <#if alignment == "Center">margin-left: auto; margin-right: auto;<#elseif alignment == "Right">margin-left: auto; </#if>' 
         onClick="document.forms['com-codgin-qrcode-${QRauthExecId}'].submit();">
             <span style="display: none;">${QRauthToken}</span>
             <img id="com-codgin-qr-auth-qr-code" src="data:image/png;base64,${QRauthImage}" alt="Figure: Barcode">
         </div>
+
+        <#if sendEmailFallback && userEmail?? && userEmail != "">
+            <div class="alert alert-info">
+                <span class="kc-feedback-text">${msg("emailFallbackSent", userEmail)}</span>
+            </div>
+        </#if>
 
         <p style="padding-top: 15px; padding-bottom: 15px;"><b>Session: </b>${tabId}</p>
 
