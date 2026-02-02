@@ -254,8 +254,15 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
         // Get user
         RealmModel realm = session.getContext().getRealm();
         AppAuthManager authManager = new AppAuthManager();
-        AuthenticationManager.AuthResult auth = authManager.authenticateIdentityCookie(session, realm);
-        UserModel user = auth.user();
+        AuthenticationManager.AuthResult authResult = authManager.authenticateIdentityCookie(session, realm);
+        if (authResult == null) {
+            throw new ErrorPageException(session,
+                    Response.Status.UNAUTHORIZED,
+                    Messages.INVALID_USER);
+        }
+        
+        // Get user with compatibility for both Keycloak 26.4 and 26.5
+        UserModel user = getUserFromAuthResult(authResult);
 
         // Get token
         ClientModel qrClient = realm.getClientByClientId(QrUtils.CLIENT_ID);
@@ -387,5 +394,30 @@ public class QrAuthenticatorResourceProvider implements RealmResourceProvider {
                 .path("protocol/openid-connect/token");
         String tokenUrl = builderTokenPath.build().toString();
         return tokenUrl;
+    }
+    
+    /**
+     * Gets the user from AuthResult with compatibility for both Keycloak 26.4 and 26.5
+     * In 26.5, AuthResult is a record with user() method, while in 26.4 it's a regular class with getUser() method
+     */
+    private UserModel getUserFromAuthResult(AuthenticationManager.AuthResult authResult) {
+        try {
+            // Try using the new method available in Keycloak 26.5 (record accessor)
+            java.lang.reflect.Method userMethod = authResult.getClass().getMethod("user");
+            return (UserModel) userMethod.invoke(authResult);
+        } catch (Exception e) {
+            try {
+                // Fallback to deprecated method for older versions
+                java.lang.reflect.Method getUserMethod = authResult.getClass().getMethod("getUser");
+                return (UserModel) getUserMethod.invoke(authResult);
+            } catch (Exception ex) {
+                // If both methods fail, re-throw the original exception
+                if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                } else {
+                    throw new RuntimeException("Failed to get user from AuthResult", e);
+                }
+            }
+        }
     }
 }
