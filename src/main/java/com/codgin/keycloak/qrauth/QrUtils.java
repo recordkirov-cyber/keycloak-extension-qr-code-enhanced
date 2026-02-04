@@ -190,7 +190,7 @@ public class QrUtils {
             client.setProtocol("openid-connect");
             client.setName("QR Code Login Extension");
             client.setDescription(
-                    "Client for QR Code execution in browser logins. Can be deleted and will automatically regenerate on next browser login. See https://github.com/HadleySo/keycloak-extension-qr-code-execution");
+                    "Client for QR Code execution in browser logins. Can be deleted and will automatically regenerate on next browser login. See https://github.com/recordkirov-cyber/keycloak-extension-qr-code-enhanced");
 
             // Scope to only "acr"
             client.setFullScopeAllowed(false);

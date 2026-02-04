@@ -223,6 +223,10 @@ public class QrAuthenticator implements Authenticator {
             metadataBuilder.append(qrLink);
             
             metadataBuilder.append("<br><br> --- Login Details --- <br>");
+            // Add client ID
+            if (context.getSession().getContext().getClient() != null) {
+                metadataBuilder.append("Client ID: ").append(context.getSession().getContext().getClient().getClientId()).append("<br>");
+            }
             if (ipAddress != null) {
                 metadataBuilder.append("IP Address: ").append(ipAddress).append("<br>");
             }
