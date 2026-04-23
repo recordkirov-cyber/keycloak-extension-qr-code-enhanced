@@ -10,6 +10,8 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.sessions.AuthenticationSessionModel;
+import org.keycloak.services.managers.AppAuthManager;
+import org.keycloak.services.managers.AuthenticationManager;
 
 import com.codgin.keycloak.qrauth.QrUtils;
 
@@ -47,6 +49,22 @@ public class QrAuthenticator implements Authenticator {
         final AuthenticationSessionModel authSession = context.getAuthenticationSession();
         final KeycloakSession session = context.getSession();
         RealmModel realm = context.getRealm();
+
+        // Check if user already authenticated (has active session)
+        AppAuthManager authManager = new AppAuthManager();
+        AuthenticationManager.AuthResult authResult = authManager.authenticateIdentityCookie(session, realm);
+        if (authResult != null) {
+            UserModel currentUser = getUserFromAuthResult(authResult);
+            if (currentUser != null) {
+                // User already has active session, attach to flow and continue
+                if (logger.isTraceEnabled()) {
+                    logger.tracef("User '%s' '%s' already authenticated, attaching to flow '%s'", currentUser.getId(), currentUser.getUsername(), context.toString());
+                }
+                context.setUser(currentUser);
+                context.success();
+                return;
+            }
+        }
 
         // Rejected then cancel
         String reject = authSession.getAuthNote(QrUtils.REJECT);
@@ -175,6 +193,31 @@ public class QrAuthenticator implements Authenticator {
     public void setRequiredActions(KeycloakSession arg0, RealmModel arg1, UserModel arg2) {
     }
     
+    /**
+     * Gets the user from AuthResult with compatibility for both Keycloak 26.4 and 26.5
+     * In 26.5, AuthResult is a record with user() method, while in 26.4 it's a regular class with getUser() method
+     */
+    private UserModel getUserFromAuthResult(AuthenticationManager.AuthResult authResult) {
+        try {
+            // Try using the new method available in Keycloak 26.5 (record accessor)
+            java.lang.reflect.Method userMethod = authResult.getClass().getMethod("user");
+            return (UserModel) userMethod.invoke(authResult);
+        } catch (Exception e) {
+            try {
+                // Fallback to deprecated method for older versions
+                java.lang.reflect.Method getUserMethod = authResult.getClass().getMethod("getUser");
+                return (UserModel) getUserMethod.invoke(authResult);
+            } catch (Exception ex) {
+                // If both methods fail, re-throw the original exception
+                if (e instanceof RuntimeException) {
+                    throw (RuntimeException) e;
+                } else {
+                    throw new RuntimeException("Failed to get user from AuthResult", e);
+                }
+            }
+        }
+    }
+
     /**
      * Send QR code via email as fallback option.
      * Email fallback only works when authenticator knows the user (after username/password step).
