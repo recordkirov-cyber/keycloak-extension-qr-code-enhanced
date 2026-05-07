@@ -1,3 +1,4 @@
 com.codgin.keycloak.qrauth.auth.QrAuthenticatorFactory
 com.codgin.keycloak.qrauth.forms.QrUsernamePasswordFormFactory
 com.codgin.keycloak.qrauth.credentialPersistence.CredTypeFactory
+com.codgin.keycloak.qrauth.auth.TotpThenQrAuthenticatorFactory

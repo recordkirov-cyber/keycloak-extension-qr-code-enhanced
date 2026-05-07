@@ -91,7 +91,7 @@ public class QrUtils {
         refreshProperty.setType(ProviderConfigProperty.INTEGER_TYPE);
         refreshProperty.setHelpText(
                 "How often in seconds to reload the page to check if the authentication is approved. Zero disables refresh.");
-        refreshProperty.setDefaultValue(15);
+        refreshProperty.setDefaultValue(150);
         refreshProperty.setRequired(true);
         configProperties.add(refreshProperty);
 
@@ -111,6 +111,7 @@ public class QrUtils {
         alignmentProperty.setType(ProviderConfigProperty.LIST_TYPE);
         alignmentProperty.setHelpText("How to align the QR code.");
         alignmentProperty.setOptions(Arrays.asList("Left", "Center", "Right"));
+        alignmentProperty.setDefaultValue("Center");
         alignmentProperty.setRequired(true);
         configProperties.add(alignmentProperty);
 

@@ -27,8 +27,8 @@ public class QrAuthenticator implements Authenticator {
     
     private static final String SEND_EMAIL_FALLBACK_CONFIG = "send.email.fallback";
     private static final String EMAIL_SUBJECT_CONFIG = "email.subject";
-    private static final String EMAIL_TEMPLATE_CONFIG = "email.template";
-    private static final String LINK_EXPIRATION_MINUTES_CONFIG = "link.expiration.minutes";
+    //private static final String EMAIL_TEMPLATE_CONFIG = "email.template";
+    //private static final String LINK_EXPIRATION_MINUTES_CONFIG = "link.expiration.minutes";
 
     @Override
     public void close() {
@@ -132,7 +132,7 @@ public class QrAuthenticator implements Authenticator {
         String tabId = authSession.getTabId();
 
         // Get refresh rate
-        int refreshRate = 15;
+        int refreshRate = 150;
         if (config != null) {
             refreshRate = Integer.valueOf(config.getConfig().get("refresh.rate"));
             if (refreshRate < 0) {
@@ -241,7 +241,7 @@ public class QrAuthenticator implements Authenticator {
             // Get configuration values
             String emailSubject = "Login with QR Code";
             String emailTemplate = "email-verification-with-code.ftl";
-            int linkExpirationMinutes = 10;
+            //int linkExpirationMinutes = 10;
             
             if (config != null) {
                 if (config.getConfig().get(EMAIL_SUBJECT_CONFIG) != null) {

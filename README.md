@@ -10,10 +10,10 @@ With QR code authentication, users can quickly and securely authenticate without
 
 ## Features
 
-There are two executions available: **QR Code Sign In** and **Username Password Form with Optional QR Code Login**
+There are three executions available: **QR Code Sign In**, **Username Password Form with Optional QR Code Login**, and **TOTP then QR Code Sign In**
 
 
-Both executions provide:
+All executions provide:
 
 - Authentication executions available in browser bound flows
 - Confirmation of session id (tabID) on confirmation page
@@ -24,7 +24,7 @@ The **QR Code Sign In** execution:
 
 - Sign in page refreshes automatically to check if another device has completed authentication
 - Does not require new ftl templates when custom themes are used
-- Can send fallback QR Authentication Link to email for improved user exp
+- Can send fallback QR Authentication Link to email for improved user experience
 
 <p align="center">
     <img src="docs/img/qr-scan-login.png" width="550">
@@ -39,6 +39,17 @@ The **Username Password Form with Optional QR Code Login** execution:
 
 <p align="center">
     <img src="docs/img/qr-username-password-form.png" width="550">
+</p>
+
+The **TOTP then QR Code Sign In** execution:
+
+- Two-factor authentication: TOTP code first, then QR code verification on another device
+- Requires users to have TOTP configured
+- Includes email fallback option to send QR code via email
+- Provides enhanced security with multi-device authentication flow
+
+<p align="center">
+    <img src="docs/img/totp-then-qr-flow.png" width="550">
 </p>
 
 
@@ -76,6 +87,11 @@ Compatible with **Keycloak 26.4+**.
 - Useful when the flow has conditions on credential type.
 - Requires the usage of `Remember Credential Type` executor in the flow used by ClientID `com-codgin-keycloak-qrauth-rest-client` (typically realm default browser).
 
+**TOTP then QR Code Sign In Configuration**:
+- **Send Email Fallback**: Enable/disable sending QR code via email as fallback option
+- **Email Subject**: Custom subject line for the email containing the QR code link
+- Requires users to have TOTP (Time-based One-Time Password) configured in their account
+
 
 ## Template Themes
 The [ftl templates](src/main/resources/theme-resources/templates) can be overridden. This is optional, unless the *Username Password Form with Optional QR Code Login* execution is used in a realm with a custom theme.
@@ -93,6 +109,14 @@ The [ftl templates](src/main/resources/theme-resources/templates) can be overrid
 `qr-login-verify.ftl`- for *QR Code Sign In* after the user authenticates, prompts to reject or approve
 - requires `${approveURL}` to approve the sign in and `${rejectURL}` to reject.
 - optional originating device info: `${ua_device}`, `${ua_os}`, `${ua_agent}`, and `${local_localized}`
+
+`totp-then-qr-scan.ftl` - for *TOTP then QR Code Sign In* when QR code is displayed
+- requires `${url.resourcesPath}/js/qrcode.min.js` and `${url.resourcesPath}/js/jquery.min.js` for javascript
+- requires `QRauthToken` to provide the QR Code URL
+
+`totp-then-qr-totp.ftl` - for *TOTP then QR Code Sign In* when TOTP code input is required
+- requires TOTP input field and form submission
+- requires `executionId` for form processing
 
 #### Messages
 
