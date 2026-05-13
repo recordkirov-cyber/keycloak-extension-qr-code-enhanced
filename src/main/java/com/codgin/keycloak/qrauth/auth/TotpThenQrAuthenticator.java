@@ -15,11 +15,13 @@ import org.keycloak.credential.CredentialProvider;
 //import org.keycloak.credential.CredentialProviderFactory;
 import org.keycloak.credential.OTPCredentialProvider;
 import org.keycloak.credential.OTPCredentialProviderFactory;
+import org.keycloak.common.ClientConnection;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.email.EmailException;
 import org.keycloak.email.EmailTemplateProvider;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
+import org.keycloak.services.managers.BruteForceProtector;
 
 import com.codgin.keycloak.qrauth.QrUtils;
 
@@ -34,6 +36,7 @@ import java.util.stream.Collectors;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 
 @JBossLog
 public class TotpThenQrAuthenticator implements Authenticator {
@@ -42,6 +45,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
     // Authentication session notes
     private static final String TOTP_VALIDATED = "TOTP_VALIDATED";
     private static final String TOTP_ERROR_MESSAGE = "TOTP_ERROR_MESSAGE";
+    private static final String SESSION_INVALID = "SESSION_INVALID";
 
     private static final String SEND_EMAIL_FALLBACK_CONFIG = "send.email.fallback";
     private static final String EMAIL_SUBJECT_CONFIG = "email.subject";
@@ -53,13 +57,13 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
     @Override
     public void action(AuthenticationFlowContext context) {
-        log.info("TotpThenQrAuthenticator.action");
+        log.debug("TotpThenQrAuthenticator.action");
         // Action is handled in authenticate() method
     }
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
-        log.info("TotpThenQrAuthenticator.authenticate");
+        log.debug("TotpThenQrAuthenticator.authenticate");
 
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
         final AuthenticationSessionModel authSession = context.getAuthenticationSession();
@@ -69,25 +73,39 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
         // Check if this is form submission with TOTP code
         String totp = context.getHttpRequest().getDecodedFormParameters().getFirst("totp");
-        log.infof("TotpThenQrAuthenticator.authenticate - totp from form: %s", totp);
+        log.debugf("TotpThenQrAuthenticator.authenticate - totp from form: %s", totp);
         
         if (totp != null && !totp.isEmpty()) {
             // This is TOTP form submission
-            log.info("TotpThenQrAuthenticator.authenticate - processing TOTP submission");
+            log.debug("TotpThenQrAuthenticator.authenticate - processing TOTP submission");
+
+            if (isUserDisabledByBruteForce(context, user)) {
+                log.debug("TotpThenQrAuthenticator.authenticate - user disabled by brute force");
+                authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Your account is temporarily disabled because of too many failed login attempts.");
+                showTotpForm(context);
+                return;
+            }
+
             boolean valid = validateTotp(context, totp);
-            log.infof("TotpThenQrAuthenticator.authenticate - TOTP validation result: %b", valid);
+            log.debugf("TotpThenQrAuthenticator.authenticate - TOTP validation result: %b", valid);
             
             if (valid) {
-                // TOTP valid, mark as validated and proceed to QR phase
-                log.info("TotpThenQrAuthenticator.authenticate - TOTP valid, setting TOTP_VALIDATED");
+                // TOTP valid, clear brute-force state, mark as validated and proceed to QR phase
+                log.debug("TotpThenQrAuthenticator.authenticate - TOTP valid, clearing brute force state");
+                clearBruteForceState(context, user);
+                log.debug("TotpThenQrAuthenticator.authenticate - TOTP valid, setting TOTP_VALIDATED");
                 authSession.setAuthNote(TOTP_VALIDATED, "true");
-                log.infof("TotpThenQrAuthenticator.authenticate - TOTP_VALIDATED set, will show QR code");
+                log.debugf("TotpThenQrAuthenticator.authenticate - TOTP_VALIDATED set, will show QR code");
                 // Continue to QR code phase by re-running authenticate logic below
             } else {
-                // TOTP invalid, show error
-                log.info("TotpThenQrAuthenticator.authenticate - TOTP invalid");
-                authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Invalid TOTP code");
-                // Re-show TOTP form with error
+                // TOTP invalid, register failed attempt and show error
+                log.debug("TotpThenQrAuthenticator.authenticate - TOTP invalid");
+                recordFailedLoginAttempt(context, user);
+                if (isUserDisabledByBruteForce(context, user)) {
+                    authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Your account is temporarily disabled because of too many failed login attempts.");
+                } else {
+                    authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Invalid TOTP code");
+                }
                 showTotpForm(context);
                 return;
             }
@@ -116,11 +134,11 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
         // Check if TOTP is already validated
         String totpValidated = authSession.getAuthNote(TOTP_VALIDATED);
-        log.infof("TotpThenQrAuthenticator.authenticate - TOTP_VALIDATED note: %s", totpValidated);
+        log.debugf("TotpThenQrAuthenticator.authenticate - TOTP_VALIDATED note: %s", totpValidated);
         
         if ("true".equals(totpValidated)) {
             // TOTP validated, now handle QR code phase
-            log.info("TotpThenQrAuthenticator.authenticate - TOTP validated, proceeding to QR phase");
+            log.debug("TotpThenQrAuthenticator.authenticate - TOTP validated, proceeding to QR phase");
 
             // Check if QR authentication is already complete
             String authOkUserId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
@@ -161,13 +179,13 @@ public class TotpThenQrAuthenticator implements Authenticator {
             showQrCode(context);
         } else {
             // TOTP not yet validated, show TOTP form
-            log.info("TotpThenQrAuthenticator.authenticate - TOTP not validated, showing TOTP form");
+            log.debug("TotpThenQrAuthenticator.authenticate - TOTP not validated, showing TOTP form");
             showTotpForm(context);
         }
     }
 
     private void showTotpForm(AuthenticationFlowContext context) {
-        log.info("TotpThenQrAuthenticator.showTotpForm");
+        log.debug("TotpThenQrAuthenticator.showTotpForm");
 
         UserModel user = context.getUser();
         if (user == null) {
@@ -187,6 +205,10 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 .createForm("totp-then-qr-totp.ftl");
             context.challenge(challenge);
             return;
+        }
+
+        if (isUserDisabledByBruteForce(context, user)) {
+            context.getAuthenticationSession().setAuthNote(TOTP_ERROR_MESSAGE, "Your account is temporarily disabled because of too many failed login attempts.");
         }
 
         // Prepare form data
@@ -214,7 +236,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
     }
 
     private void showQrCode(AuthenticationFlowContext context) {
-        log.info("TotpThenQrAuthenticator.showQrCode");
+        log.debug("TotpThenQrAuthenticator.showQrCode");
 
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
         final AuthenticationSessionModel authSession = context.getAuthenticationSession();
@@ -226,7 +248,10 @@ public class TotpThenQrAuthenticator implements Authenticator {
         String link = authSession.getAuthNote(QrUtils.NOTE_QR_LINK);
 
         if (link == null) {
-            // Create token and convert to link
+            // Create token and convert to link - THIS STARTS THE TOKEN TTL
+            //long tokenCreationTime = System.currentTimeMillis();
+            //log.debugf("TotpThenQrAuthenticator.showQrCode - Creating new QR token at %d (after TOTP validation)", tokenCreationTime);
+            
             String token = QrUtils.createPublicToken(context, QrUtils.transferAcrEnabled(config));
             if (token == null) {
                 context.failure(AuthenticationFlowError.INTERNAL_ERROR);
@@ -234,8 +259,17 @@ public class TotpThenQrAuthenticator implements Authenticator {
             }
             link = QrUtils.linkFromActionToken(session, realm, token, false);
             authSession.setAuthNote(QrUtils.NOTE_QR_LINK, link);
+            authSession.setAuthNote(QrUtils.BRUTE_FORCE_USER_ID, user.getId());
             if (logger.isTraceEnabled()) {
                 logger.tracef("Created new token with link - token: '%s;", token);
+            }
+
+            // Set QR timeout starting from now (when QR is shown to user)
+            QrUtils.setQrTimeout(context);
+        } else {
+            log.debugf("TotpThenQrAuthenticator.showQrCode - Reusing existing QR link (token already created)");
+            if (authSession.getAuthNote(QrUtils.BRUTE_FORCE_USER_ID) == null && user != null) {
+                authSession.setAuthNote(QrUtils.BRUTE_FORCE_USER_ID, user.getId());
             }
         }
 
@@ -246,7 +280,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
         String tabId = authSession.getTabId();
 
         // Get refresh rate
-        int refreshRate = 15;
+        int refreshRate = 150;
         if (config != null) {
             refreshRate = Integer.valueOf(config.getConfig().get("refresh.rate"));
             if (refreshRate < 0) {
@@ -287,11 +321,69 @@ public class TotpThenQrAuthenticator implements Authenticator {
                         .setAttribute("isSecondFactor", true) // Indicate this is second factor
                         .setAttribute("sendEmailFallback", sendEmailFallback)
                         .setAttribute("username", user.getUsername())
+                        .setAttribute("userEmail", user.getEmail())
                         .createForm("totp-then-qr-scan.ftl"));
     }
 
+    private boolean isUserDisabledByBruteForce(AuthenticationFlowContext context, UserModel user) {
+        BruteForceProtector protector = context.getSession().getProvider(BruteForceProtector.class);
+        if (protector == null || user == null) {
+            return false;
+        }
+
+        RealmModel realm = context.getRealm();
+        boolean disabled = protector.isTemporarilyDisabled(context.getSession(), realm, user)
+                || protector.isPermanentlyLockedOut(context.getSession(), realm, user);
+
+        if (disabled) {
+            context.getAuthenticationSession().setAuthNote(SESSION_INVALID, "true");
+            return true;
+        }
+
+        context.getAuthenticationSession().removeAuthNote(SESSION_INVALID);
+        return false;
+    }
+
+    private void recordFailedLoginAttempt(AuthenticationFlowContext context, UserModel user) {
+        BruteForceProtector protector = context.getSession().getProvider(BruteForceProtector.class);
+        invokeBruteForceProtectorMethod(protector, "failedLogin", context, user);
+    }
+
+    private void clearBruteForceState(AuthenticationFlowContext context, UserModel user) {
+        BruteForceProtector protector = context.getSession().getProvider(BruteForceProtector.class);
+        invokeBruteForceProtectorMethod(protector, "successfulLogin", context, user);
+        context.getAuthenticationSession().removeAuthNote(SESSION_INVALID);
+    }
+
+    private void invokeBruteForceProtectorMethod(BruteForceProtector protector, String methodName,
+            AuthenticationFlowContext context, UserModel user) {
+        if (protector == null || user == null) {
+            return;
+        }
+
+        RealmModel realm = context.getRealm();
+        ClientConnection connection = context.getSession().getContext().getConnection();
+        UriInfo uriInfo = context.getSession().getContext().getUri();
+
+        try {
+            java.lang.reflect.Method method = protector.getClass().getMethod(methodName,
+                    RealmModel.class, UserModel.class, ClientConnection.class, UriInfo.class, String.class);
+            method.invoke(protector, realm, user, connection, uriInfo, "otp");
+        } catch (NoSuchMethodException e) {
+            try {
+                java.lang.reflect.Method fallback = protector.getClass().getMethod(methodName,
+                        RealmModel.class, UserModel.class, ClientConnection.class, UriInfo.class);
+                fallback.invoke(protector, realm, user, connection, uriInfo);
+            } catch (Exception ex) {
+                logger.errorf(ex, "Failed to invoke fallback brute-force method %s", methodName);
+            }
+        } catch (Exception e) {
+            logger.errorf(e, "Failed to invoke brute-force method %s", methodName);
+        }
+    }
+
     private boolean validateTotp(AuthenticationFlowContext context, String totp) {
-        log.info("TotpThenQrAuthenticator.validateTotp");
+        log.debug("TotpThenQrAuthenticator.validateTotp");
 
         UserModel user = context.getUser();
         if (user == null) {
@@ -304,15 +396,12 @@ public class TotpThenQrAuthenticator implements Authenticator {
             .getStoredCredentialsByTypeStream(OTPCredentialModel.TYPE)
             .collect(Collectors.toList());
 
-        log.infof("TotpThenQrAuthenticator.validateTotp - found %d OTP credentials", otpCredentials.size());
+        log.debugf("TotpThenQrAuthenticator.validateTotp - found %d OTP credentials", otpCredentials.size());
 
         if (otpCredentials.isEmpty()) {
             log.warn("TotpThenQrAuthenticator.validateTotp - no OTP credentials found");
             return false;
         }
-
-        // Use the first TOTP credential for validation
-        CredentialModel credential = otpCredentials.get(0);
 
         // Use the built-in OTP credential provider for validation
         try {
@@ -320,10 +409,17 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 .getProvider(CredentialProvider.class, OTPCredentialProviderFactory.PROVIDER_ID);
 
             if (provider != null) {
-                boolean result = provider.isValid(context.getRealm(), user,
-                    new UserCredentialModel(credential.getId(), OTPCredentialModel.TYPE, totp));
-                log.infof("TotpThenQrAuthenticator.validateTotp - provider validation result: %b", result);
-                return result;
+                // Check all TOTP credentials until one validates successfully
+                for (CredentialModel credential : otpCredentials) {
+                    boolean result = provider.isValid(context.getRealm(), user,
+                        new UserCredentialModel(credential.getId(), OTPCredentialModel.TYPE, totp));
+                    log.debugf("TotpThenQrAuthenticator.validateTotp - credential %s validation result: %b", credential.getId(), result);
+                    if (result) {
+                        return true;
+                    }
+                }
+                // None of the credentials validated
+                return false;
             } else {
                 log.warn("TotpThenQrAuthenticator.validateTotp - OTPCredentialProvider is null");
             }

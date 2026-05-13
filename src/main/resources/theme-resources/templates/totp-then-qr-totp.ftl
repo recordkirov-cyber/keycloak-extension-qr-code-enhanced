@@ -20,7 +20,7 @@
         <form id="kc-totp-qr-form" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
             <div class="${properties.kcFormGroupClass!}">
                 <div class="${properties.kcLabelWrapperClass!}">
-                    <label for="totp" class="${properties.kcLabelClass!}">${msg("loginTotpOneTime")}</label>
+                    <label for="totp" class="${properties.kcLabelClass!}">${msg("totpThenQrTotpLabel")}</label>
                 </div>
                 <div class="${properties.kcInputWrapperClass!}">
                     <input type="text" id="totp" name="totp" class="${properties.kcInputClass!}" autocomplete="off" autofocus />

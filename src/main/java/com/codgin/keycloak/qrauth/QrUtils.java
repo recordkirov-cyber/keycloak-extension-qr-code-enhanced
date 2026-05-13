@@ -284,13 +284,36 @@ public class QrUtils {
         ClientConnection clientConnection = session.getContext().getConnection();
         UriInfo uriInfo = session.getContext().getUri();
 
-        if (StringUtil.isNotBlank(bruteUserId)) {
-            UserModel user = session.users().getUserById(realm, bruteUserId);
-
-            BruteForceProtector protector = session.getProvider(BruteForceProtector.class);
-            protector.failedLogin(realm, user, clientConnection, uriInfo);
+        UserModel user = context.getUser();
+        if (user == null && StringUtil.isNotBlank(bruteUserId)) {
+            user = session.users().getUserById(realm, bruteUserId);
         }
 
+        BruteForceProtector protector = session.getProvider(BruteForceProtector.class);
+        invokeBruteForceFailedLogin(protector, realm, user, clientConnection, uriInfo, "qr");
+    }
+
+    private static void invokeBruteForceFailedLogin(BruteForceProtector protector, RealmModel realm, UserModel user,
+            ClientConnection clientConnection, UriInfo uriInfo, String authType) {
+        if (protector == null || user == null) {
+            return;
+        }
+
+        try {
+            java.lang.reflect.Method method = protector.getClass().getMethod("failedLogin", RealmModel.class, UserModel.class,
+                    ClientConnection.class, UriInfo.class, String.class);
+            method.invoke(protector, realm, user, clientConnection, uriInfo, authType);
+        } catch (NoSuchMethodException e) {
+            try {
+                java.lang.reflect.Method fallback = protector.getClass().getMethod("failedLogin", RealmModel.class, UserModel.class,
+                        ClientConnection.class, UriInfo.class);
+                fallback.invoke(protector, realm, user, clientConnection, uriInfo);
+            } catch (Exception ex) {
+                logger.errorf(ex, "Failed to invoke fallback brute-force failedLogin");
+            }
+        } catch (Exception e) {
+            logger.errorf(e, "Failed to invoke brute-force failedLogin");
+        }
     }
 
     public static boolean timeoutPassed(AuthenticationFlowContext context) {
@@ -300,21 +323,25 @@ public class QrUtils {
         if (StringUtil.isNotBlank(timeout)) {
             ZonedDateTime maxTimestamp = ZonedDateTime.parse(timeout);
             return maxTimestamp.isBefore(ZonedDateTime.now());
-
         }
 
+        // TIMEOUT not set yet, return false (no timeout)
+        return false;
+    }
+
+    public static void setQrTimeout(AuthenticationFlowContext context) {
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
         int timeoutRate = 300;
         if (config != null) {
             timeoutRate = Integer.valueOf(config.getConfig().get("timeout.rate"));
-
-            if (timeoutRate > 0) {
-                ZonedDateTime maxTimestamp = ZonedDateTime.now().plusSeconds(timeoutRate);
-                authSession.setAuthNote(QrUtils.TIMEOUT, maxTimestamp.toString());
-            }
         }
 
-        return false;
+        if (timeoutRate > 0) {
+            AuthenticationSessionModel authSession = context.getAuthenticationSession();
+            ZonedDateTime maxTimestamp = ZonedDateTime.now().plusSeconds(timeoutRate);
+            authSession.setAuthNote(QrUtils.TIMEOUT, maxTimestamp.toString());
+            log.infof("QrUtils.setQrTimeout - QR timeout set to %d seconds from now", timeoutRate);
+        }
     }
 
     public static void handleACR(AuthenticatorConfigModel config, AuthenticationFlowContext context) {

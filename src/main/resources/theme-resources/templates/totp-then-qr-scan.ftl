@@ -21,6 +21,12 @@
             <img id="com-codgin-qr-auth-qr-code" src="data:image/png;base64,${QRauthImage}" alt="Figure: Barcode">
         </div>
 
+        <#if sendEmailFallback && userEmail?? && userEmail != "">
+            <div class="alert alert-info">
+                <span class="kc-feedback-text">${msg("emailFallbackSent", userEmail)}</span>
+            </div>
+        </#if>
+
         <p style="padding-top: 15px; padding-bottom: 15px;"><b>${msg("username")}:</b> ${username}</p>
         <p style="padding-top: 5px; padding-bottom: 5px;"><b>${msg("session")}:</b> ${tabId}</p>
 
@@ -31,7 +37,7 @@
 
         <#if refreshRate != 0>
             <script>
-                // Wait 15 seconds
+                // Auto-refresh the page after the configured refresh rate
                 setTimeout(function() {
                     document.getElementById("com-codgin-qrcode-${QRauthExecId}").submit();
                 }, ${refreshRate}000);
