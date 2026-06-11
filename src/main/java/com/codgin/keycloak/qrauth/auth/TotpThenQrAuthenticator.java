@@ -15,6 +15,7 @@ import org.keycloak.credential.CredentialProvider;
 //import org.keycloak.credential.CredentialProviderFactory;
 import org.keycloak.credential.OTPCredentialProvider;
 import org.keycloak.credential.OTPCredentialProviderFactory;
+import org.keycloak.models.credential.WebAuthnCredentialModel;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.email.EmailException;
@@ -49,6 +50,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
     private static final String SEND_EMAIL_FALLBACK_CONFIG = "send.email.fallback";
     private static final String EMAIL_SUBJECT_CONFIG = "email.subject";
+    private static final String EMAIL_PREFIX_CUTOFF = "email.prefixcut";
     private static final String EMAIL_TEMPLATE = "email-verification-with-code.ftl";
 
     @Override
@@ -70,6 +72,17 @@ public class TotpThenQrAuthenticator implements Authenticator {
         final KeycloakSession session = context.getSession();
         RealmModel realm = context.getRealm();
         UserModel user = context.getUser();
+
+        // Check if user is set
+        if (user == null) {
+            context.failure(AuthenticationFlowError.UNKNOWN_USER);
+            return;
+        }
+
+        if (!isTotpConfigured(user) && !isWAConfigured(user)) {
+            context.failure(AuthenticationFlowError.CREDENTIAL_SETUP_REQUIRED);
+            return;
+        }
 
         // Check if this is form submission with TOTP code
         String totp = context.getHttpRequest().getDecodedFormParameters().getFirst("totp");
@@ -124,12 +137,6 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 context.success();
                 return;
             }
-        }
-
-        // Check if user is set
-        if (user == null) {
-            context.failure(AuthenticationFlowError.UNKNOWN_USER);
-            return;
         }
 
         // Check if TOTP is already validated
@@ -197,7 +204,15 @@ public class TotpThenQrAuthenticator implements Authenticator {
             return;
         }
 
-        // Check if user has TOTP configured
+        if (!isWAConfigured(user)) {
+        context.failure(AuthenticationFlowError.CREDENTIAL_SETUP_REQUIRED,
+            context.form()
+                .setError("waNotConfigured", "WebAuthn-passwordless authentication is not configured for this user.")
+                .createForm("totp-then-qr-totp.ftl"));
+        return;
+        }
+
+        // Проверка TOTP: если нет — явно завершаем с SETUP_REQUIRED  
         if (!isTotpConfigured(user)) {
             // Show error - TOTP not configured
             Response challenge = context.form()
@@ -437,6 +452,13 @@ public class TotpThenQrAuthenticator implements Authenticator {
             .isPresent();
     }
 
+    private boolean isWAConfigured(UserModel user) {
+        return user.credentialManager()
+            .getStoredCredentialsByTypeStream(WebAuthnCredentialModel.TYPE_PASSWORDLESS)
+            .findFirst()
+            .isPresent();
+    }
+
     private void sendEmailFallback(AuthenticationFlowContext context, String qrLink) {
         try {
             UserModel user = context.getUser();
@@ -446,14 +468,31 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 }
                 return;
             }
+            String emailUser = user.getEmail();
+            String delim = ";";
 
             AuthenticatorConfigModel config = context.getAuthenticatorConfig();
 
             String emailSubject = "Login with QR Code";
             String emailTemplate = EMAIL_TEMPLATE;
+            String emailPrefixCut = null;
 
             if (config != null && config.getConfig().get(EMAIL_SUBJECT_CONFIG) != null) {
                 emailSubject = config.getConfig().get(EMAIL_SUBJECT_CONFIG);
+            }
+
+            if (config != null && config.getConfig().get(EMAIL_PREFIX_CUTOFF) != null) {
+                emailPrefixCut = config.getConfig().get(EMAIL_PREFIX_CUTOFF);
+            }
+
+            if (emailPrefixCut != null) {
+                String[] listPrefixes = emailPrefixCut.split(delim, 1);
+                for (String prefix : listPrefixes) {
+                    if (prefix.length() > 0 && emailUser.contains(prefix)) {
+                        emailUser = emailUser.substring(prefix.length());
+                        break;
+                    }
+                }
             }
 
             final AuthenticationSessionModel authSession = context.getAuthenticationSession();
@@ -491,10 +530,10 @@ public class TotpThenQrAuthenticator implements Authenticator {
             EmailTemplateProvider emailProvider = context.getSession().getProvider(EmailTemplateProvider.class);
             emailProvider.setRealm(context.getRealm());
             emailProvider.setUser(user);
-            emailProvider.send(emailSubject, emailTemplate, attributes);
+            emailProvider.send(emailSubject, emailTemplate, attributes, emailUser);
 
             if (logger.isDebugEnabled()) {
-                logger.debugf("Sent QR code email to user %s", user.getEmail());
+                logger.debugf("Sent QR code email to user %s", emailUser);
             }
         } catch (EmailException e) {
             logger.error("Failed to send QR code email", e);
@@ -505,8 +544,11 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
     @Override
     public boolean configuredFor(KeycloakSession session, RealmModel realm, UserModel user) {
-        // This authenticator is configured for users who have TOTP configured
-        return isTotpConfigured(user);
+        // This authenticator is configured for users who have TOTP and WebAuthn-passwordless configured
+        boolean hasTotp = isTotpConfigured(user);
+        boolean hasWebAuthn = isWAConfigured(user);
+        
+        return hasTotp && hasWebAuthn;
     }
 
     @Override

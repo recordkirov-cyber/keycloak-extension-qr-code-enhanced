@@ -34,7 +34,7 @@
                 </div>
 
                 <div id="kc-form-buttons" class="${properties.kcFormButtonsClass!}">
-                    <input type="hidden" name="authenticationExecution" value="${executionId}" />
+                    <input type="hidden" name="authenticationExecution" value="${executionId!'unknown'}">
                     <input class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonLargeClass!}" name="login" id="kc-login" type="submit" value="${msg("doLogIn")}"/>
                 </div>
             </div>

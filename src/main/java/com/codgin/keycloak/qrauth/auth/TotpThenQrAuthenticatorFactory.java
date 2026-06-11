@@ -42,6 +42,14 @@ public class TotpThenQrAuthenticatorFactory implements AuthenticatorFactory {
         emailSubjectProperty.setHelpText("Subject for the QR code email");
         emailSubjectProperty.setDefaultValue("Login with QR Code");
         properties.add(emailSubjectProperty);
+
+        ProviderConfigProperty emailPrefixCut = new ProviderConfigProperty();
+        emailPrefixCut.setName("email.prefixcut");
+        emailPrefixCut.setLabel("Email Prefix2Cut");
+        emailPrefixCut.setType(ProviderConfigProperty.STRING_TYPE);
+        emailPrefixCut.setHelpText("Prefixes (sep - ;) cutof if email startwith it");
+        emailPrefixCut.setDefaultValue("");
+        properties.add(emailPrefixCut);
     }
 
     @Override

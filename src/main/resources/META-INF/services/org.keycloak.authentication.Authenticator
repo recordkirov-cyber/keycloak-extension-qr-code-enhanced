@@ -1,3 +1,4 @@
 com.codgin.keycloak.qrauth.auth.QrAuthenticator
 com.codgin.keycloak.qrauth.forms.QrUsernamePasswordForm
 com.codgin.keycloak.qrauth.credentialPersistence.CredType
+com.codgin.keycloak.qrauth.auth.TotpThenQrAuthenticator
