@@ -65,6 +65,7 @@ public class QrUtils {
     public static final String AUTHENTICATED_CREDENTIALS_AGE = "COM-HADLEYSO-KEYCLOAK-QRAUTH-AUTHENTICATED_CREDENTIALS_AGE";
     public static final String BRUTE_FORCE_USER_ID = "BRUTE_FORCE_USER_ID";
     public static final String NOTE_QR_LINK = "QR-LINK-PUBLIC";
+    public static final String NOTE_QR_WARNING = "QR-WARNING";
     public static final String REJECT = "REJECT";
     public static final String TIMEOUT = "TIMEOUT";
 

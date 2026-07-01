@@ -151,7 +151,17 @@ public class TotpThenQrAuthenticator implements Authenticator {
             String authOkUserId = authSession.getAuthNote(QrUtils.AUTHENTICATED_USER_ID);
             if (authOkUserId != null) {
                 UserModel qrUser = session.users().getUserById(realm, authOkUserId);
-                if (qrUser != null && qrUser.getId().equals(user.getId())) {
+                if (qrUser != null) {
+                    if (!qrUser.getId().equals(user.getId())) {
+                        if (logger.isTraceEnabled()) {
+                            logger.tracef("Flow '%s' authenticated for user '%s' but current user is '%s', clearing user and failing", context.toString(), qrUser.getId(), user.getId());
+                        }
+                        Response challenge = context.form()
+                            .setError("QRNotSameUser", "You are authenticated with a different user. Please authenticate with the correct account.")
+                            .createForm("totp-then-qr-totp.ftl");
+                        context.challenge(challenge);
+                        return;
+                    }
                     // QR authentication successful for the same user
                     context.setUser(qrUser);
                     QrUtils.handleACR(config, context);
@@ -261,6 +271,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
 
         // Check if already made
         String link = authSession.getAuthNote(QrUtils.NOTE_QR_LINK);
+        String msgWarning = authSession.getAuthNote(QrUtils.NOTE_QR_WARNING);
 
         if (link == null) {
             // Create token and convert to link - THIS STARTS THE TOKEN TTL
@@ -330,13 +341,14 @@ public class TotpThenQrAuthenticator implements Authenticator {
                         .setAttribute("QRauthExecId", execId)
                         .setAttribute("QRauthToken", link)
                         .setAttribute("tabId", tabId)
+                        .setAttribute("doQrCodeWarning", msgWarning)
                         .setAttribute("refreshRate", refreshRate)
                         .setAttribute("alignment", alignment)
                         .setAttribute("QRauthImage", qrImageData)
                         .setAttribute("isSecondFactor", true) // Indicate this is second factor
                         .setAttribute("sendEmailFallback", sendEmailFallback)
                         .setAttribute("username", user.getUsername())
-                        .setAttribute("userEmail", user.getEmail())
+                        .setAttribute("userEmail", correctEmailUser(context, user))
                         .createForm("totp-then-qr-scan.ftl"));
     }
 
@@ -459,6 +471,31 @@ public class TotpThenQrAuthenticator implements Authenticator {
             .isPresent();
     }
 
+    private String correctEmailUser(AuthenticationFlowContext context, UserModel user) {
+        String emailUser = user.getEmail();
+        String delim = ";";
+
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+
+        String emailPrefixCut = null;
+
+        if (config != null && config.getConfig().get(EMAIL_PREFIX_CUTOFF) != null) {
+            emailPrefixCut = config.getConfig().get(EMAIL_PREFIX_CUTOFF);
+        }
+
+        if (emailPrefixCut != null) {
+            String[] listPrefixes = emailPrefixCut.split(delim, 1);
+            for (String prefix : listPrefixes) {
+                if (prefix.length() > 0 && emailUser.startsWith(prefix)) {
+                    emailUser = emailUser.substring(prefix.length());
+                    break;
+                }
+            }
+        }
+
+        return emailUser;
+    }
+
     private void sendEmailFallback(AuthenticationFlowContext context, String qrLink) {
         try {
             UserModel user = context.getUser();
@@ -468,31 +505,15 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 }
                 return;
             }
-            String emailUser = user.getEmail();
-            String delim = ";";
+            String emailUser = correctEmailUser(context, user);
 
             AuthenticatorConfigModel config = context.getAuthenticatorConfig();
 
             String emailSubject = "Login with QR Code";
             String emailTemplate = EMAIL_TEMPLATE;
-            String emailPrefixCut = null;
 
             if (config != null && config.getConfig().get(EMAIL_SUBJECT_CONFIG) != null) {
                 emailSubject = config.getConfig().get(EMAIL_SUBJECT_CONFIG);
-            }
-
-            if (config != null && config.getConfig().get(EMAIL_PREFIX_CUTOFF) != null) {
-                emailPrefixCut = config.getConfig().get(EMAIL_PREFIX_CUTOFF);
-            }
-
-            if (emailPrefixCut != null) {
-                String[] listPrefixes = emailPrefixCut.split(delim, 1);
-                for (String prefix : listPrefixes) {
-                    if (prefix.length() > 0 && emailUser.contains(prefix)) {
-                        emailUser = emailUser.substring(prefix.length());
-                        break;
-                    }
-                }
             }
 
             final AuthenticationSessionModel authSession = context.getAuthenticationSession();

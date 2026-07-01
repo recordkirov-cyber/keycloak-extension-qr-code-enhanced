@@ -10,6 +10,12 @@
             <span class="kc-feedback-text">${msg("totpThenQrScanInfo")}</span>
         </div>
 
+        <#if totpError??>
+            <div class="alert alert-error">
+                <span class="kc-feedback-text">${totpError}</span>
+            </div>
+        </#if>
+
         <div class="alert alert-warning">
             <span class="kc-feedback-text">${msg("doQrCodeWarning")}</span>
         </div>

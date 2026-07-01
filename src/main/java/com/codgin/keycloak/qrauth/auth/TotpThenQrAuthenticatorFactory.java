@@ -47,7 +47,7 @@ public class TotpThenQrAuthenticatorFactory implements AuthenticatorFactory {
         emailPrefixCut.setName("email.prefixcut");
         emailPrefixCut.setLabel("Email Prefix2Cut");
         emailPrefixCut.setType(ProviderConfigProperty.STRING_TYPE);
-        emailPrefixCut.setHelpText("Prefixes (sep - ;) cutof if email startwith it");
+        emailPrefixCut.setHelpText("Prefixes (sep - ;) cutoff if email startwith it");
         emailPrefixCut.setDefaultValue("");
         properties.add(emailPrefixCut);
     }
