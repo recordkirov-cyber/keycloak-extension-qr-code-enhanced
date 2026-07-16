@@ -23,6 +23,9 @@ import org.keycloak.email.EmailTemplateProvider;
 import org.keycloak.services.managers.AppAuthManager;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.managers.BruteForceProtector;
+import org.keycloak.events.EventBuilder;
+import org.keycloak.events.EventType;
+import org.keycloak.events.Details;
 
 import com.codgin.keycloak.qrauth.QrUtils;
 
@@ -73,6 +76,16 @@ public class TotpThenQrAuthenticator implements Authenticator {
         RealmModel realm = context.getRealm();
         UserModel user = context.getUser();
 
+        
+        String userAgent = authSession.getAuthNote(QrUtils.ORIGIN_UA_AGENT);
+        String os = authSession.getAuthNote(QrUtils.ORIGIN_UA_OS);
+        String device = authSession.getAuthNote(QrUtils.ORIGIN_UA_DEVICE);
+
+        String ipAddress = null;
+        if (session.getContext().getConnection() != null) {
+            ipAddress = session.getContext().getConnection().getRemoteAddr();
+        }
+
         // Check if user is set
         if (user == null) {
             context.failure(AuthenticationFlowError.UNKNOWN_USER);
@@ -110,9 +123,21 @@ public class TotpThenQrAuthenticator implements Authenticator {
                 authSession.setAuthNote(TOTP_VALIDATED, "true");
                 log.debugf("TotpThenQrAuthenticator.authenticate - TOTP_VALIDATED set, will show QR code");
                 // Continue to QR code phase by re-running authenticate logic below
+                // Record a login event for the TOTP phase so it appears in the Keycloak event log
+                new EventBuilder(realm, session, session.getContext().getConnection())
+                        .event(EventType.LOGIN)
+                        .user(user)
+                        .client(authSession.getClient())
+                        .ipAddress(ipAddress)
+                        .detail(Details.AUTH_TYPE, "totp-ok")
+                        .detail(Details.RESPONSE_TYPE, "show_qr")
+                        .detail(Details.USERNAME, user.getUsername())
+                        .detail(Details.RESPONSE_MODE, "query")
+                        .success();
             } else {
                 // TOTP invalid, register failed attempt and show error
                 log.debug("TotpThenQrAuthenticator.authenticate - TOTP invalid");
+                logger.warnf("User '%s' ('%s') NOT authenticated from IP '%s', device '%s', os '%s', browser '%s' by invalid TOTP", user.getId(), user.getUsername(), ipAddress, device, os, userAgent, user.getEmail());
                 recordFailedLoginAttempt(context, user);
                 if (isUserDisabledByBruteForce(context, user)) {
                     authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Your account is temporarily disabled because of too many failed login attempts.");
@@ -156,13 +181,17 @@ public class TotpThenQrAuthenticator implements Authenticator {
                         if (logger.isTraceEnabled()) {
                             logger.tracef("Flow '%s' authenticated for user '%s' but current user is '%s', clearing user and failing", context.toString(), qrUser.getId(), user.getId());
                         }
+                        logger.warnf("User '%s' ('%s') to try authenticated from IP '%s', device '%s', os '%s', browser '%s' not the same user '%s' ('%s') authenticated by Token", qrUser.getId(), qrUser.getUsername(), ipAddress, device, os, userAgent, user.getId(), user.getUsername());
                         Response challenge = context.form()
                             .setError("QRNotSameUser", "You are authenticated with a different user. Please authenticate with the correct account.")
                             .createForm("totp-then-qr-totp.ftl");
                         context.challenge(challenge);
                         return;
                     }
+
                     // QR authentication successful for the same user
+                    logger.infof("User '%s' ('%s') authenticated from IP '%s', device '%s', os '%s', browser '%s' successfully by TOTP phase, proceeding to QR phase (send auth link to email '%s')", qrUser.getId(), qrUser.getUsername(), ipAddress, device, os, userAgent, qrUser.getEmail());
+
                     context.setUser(qrUser);
                     QrUtils.handleACR(config, context);
                     QrUtils.handleCredTransfer(config, context);
@@ -497,6 +526,9 @@ public class TotpThenQrAuthenticator implements Authenticator {
     }
 
     private void sendEmailFallback(AuthenticationFlowContext context, String qrLink) {
+        RealmModel realm = context.getRealm();
+        final KeycloakSession session = context.getSession();
+
         try {
             UserModel user = context.getUser();
             if (user == null || user.getEmail() == null || user.getEmail().isEmpty()) {
@@ -552,6 +584,19 @@ public class TotpThenQrAuthenticator implements Authenticator {
             emailProvider.setRealm(context.getRealm());
             emailProvider.setUser(user);
             emailProvider.send(emailSubject, emailTemplate, attributes, emailUser);
+
+            // Record a send verify email event for the QR phase so it appears in the Keycloak event log
+            new EventBuilder(realm, session, session.getContext().getConnection())
+                    .event(EventType.SEND_VERIFY_EMAIL)
+                    .user(user)
+                    .client(authSession.getClient())
+                    .ipAddress(ipAddress)
+                    .detail(Details.RESPONSE_TYPE, "qr_email_fallback")
+                    .detail(Details.USERNAME, user.getUsername())
+                    .detail(Details.EMAIL, emailUser)
+                    .detail(Details.RESPONSE_MODE, "query")
+                    .detail(Details.CONTEXT, String.format("OS: %s, Device: %s, Browser: %s", os, device, userAgent))
+                    .success();
 
             if (logger.isDebugEnabled()) {
                 logger.debugf("Sent QR code email to user %s", emailUser);
