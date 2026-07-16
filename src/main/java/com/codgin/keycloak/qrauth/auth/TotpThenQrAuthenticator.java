@@ -136,8 +136,18 @@ public class TotpThenQrAuthenticator implements Authenticator {
                         .success();
             } else {
                 // TOTP invalid, register failed attempt and show error
+                new EventBuilder(realm, session, session.getContext().getConnection())
+                        .event(EventType.LOGIN_ERROR)
+                        .user(user)
+                        .client(authSession.getClient())
+                        .ipAddress(ipAddress)
+                        .detail(Details.CREDENTIAL_TYPE, "totp")
+                        .detail(Details.AUTH_TYPE, "totp-then-qr")
+                        .detail(Details.USERNAME, user.getUsername())
+                        .detail(Details.REASON, "totp-invalid")
+                        .success();
                 log.debug("TotpThenQrAuthenticator.authenticate - TOTP invalid");
-                logger.warnf("User '%s' ('%s') NOT authenticated from IP '%s', device '%s', os '%s', browser '%s' by invalid TOTP", user.getId(), user.getUsername(), ipAddress, device, os, userAgent, user.getEmail());
+                logger.warnf("User '%s' ('%s') try authenticated QR in client_id '%s' by invalid TOTP", user.getId(), user.getUsername(), authSession.getClient().getClientId());
                 recordFailedLoginAttempt(context, user);
                 if (isUserDisabledByBruteForce(context, user)) {
                     authSession.setAuthNote(TOTP_ERROR_MESSAGE, "Your account is temporarily disabled because of too many failed login attempts.");
@@ -181,7 +191,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
                         if (logger.isTraceEnabled()) {
                             logger.tracef("Flow '%s' authenticated for user '%s' but current user is '%s', clearing user and failing", context.toString(), qrUser.getId(), user.getId());
                         }
-                        logger.warnf("User '%s' ('%s') to try authenticated from IP '%s', device '%s', os '%s', browser '%s' not the same user '%s' ('%s') authenticated by Token", qrUser.getId(), qrUser.getUsername(), ipAddress, device, os, userAgent, user.getId(), user.getUsername());
+                        logger.warnf("User '%s' ('%s') to try authenticated in client_id '%s' from IP '%s', device '%s', os '%s', browser '%s' not the same user '%s' ('%s') authenticated by Token", qrUser.getId(), qrUser.getUsername(), authSession.getClient().getClientId(), ipAddress, device, os, userAgent, user.getId(), user.getUsername());
                         Response challenge = context.form()
                             .setError("QRNotSameUser", "You are authenticated with a different user. Please authenticate with the correct account.")
                             .createForm("totp-then-qr-totp.ftl");
@@ -190,7 +200,7 @@ public class TotpThenQrAuthenticator implements Authenticator {
                     }
 
                     // QR authentication successful for the same user
-                    logger.infof("User '%s' ('%s') authenticated from IP '%s', device '%s', os '%s', browser '%s' successfully by TOTP phase, proceeding to QR phase (send auth link to email '%s')", qrUser.getId(), qrUser.getUsername(), ipAddress, device, os, userAgent, qrUser.getEmail());
+                    logger.infof("User '%s' ('%s') authenticated from IP '%s', device '%s', os '%s', browser '%s' successfully in client_id '%s' by TOTP phase, proceeding to QR phase (send auth link to email '%s')", qrUser.getId(), qrUser.getUsername(), ipAddress, device, os, userAgent, authSession.getClient().getClientId(), qrUser.getEmail());
 
                     context.setUser(qrUser);
                     QrUtils.handleACR(config, context);
