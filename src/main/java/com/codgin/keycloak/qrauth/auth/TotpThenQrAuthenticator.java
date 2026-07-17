@@ -192,6 +192,16 @@ public class TotpThenQrAuthenticator implements Authenticator {
                             logger.tracef("Flow '%s' authenticated for user '%s' but current user is '%s', clearing user and failing", context.toString(), qrUser.getId(), user.getId());
                         }
                         logger.warnf("User '%s' ('%s') to try authenticated in client_id '%s' from IP '%s', device '%s', os '%s', browser '%s' not the same user '%s' ('%s') authenticated by Token", qrUser.getId(), qrUser.getUsername(), authSession.getClient().getClientId(), ipAddress, device, os, userAgent, user.getId(), user.getUsername());
+                        new EventBuilder(realm, session, session.getContext().getConnection())
+                            .event(EventType.LOGIN_ERROR)
+                            .user(user)
+                            .client(authSession.getClient())
+                            .ipAddress(ipAddress)
+                            .detail(Details.CREDENTIAL_TYPE, "qr")
+                            .detail(Details.AUTH_TYPE, "totp-then-qr")
+                            .detail(Details.USERNAME, user.getUsername())
+                            .detail(Details.REASON, "QRNotSameUser")
+                            .success();
                         Response challenge = context.form()
                             .setError("QRNotSameUser", "You are authenticated with a different user. Please authenticate with the correct account.")
                             .createForm("totp-then-qr-totp.ftl");
